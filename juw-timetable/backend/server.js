@@ -9,11 +9,16 @@ const app = express();
 
 // ── Middleware ──────────────────────────────
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: [
+    process.env.CLIENT_URL || 'http://localhost:3000',
+    'http://localhost:3000',
+    /\.onrender\.com$/,
+  ],
   credentials: true
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+ 
 
 // ── Routes ──────────────────────────────────
 app.use('/api/auth',        require('./routes/authRoutes'));
