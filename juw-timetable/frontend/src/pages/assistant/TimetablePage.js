@@ -47,6 +47,7 @@ function ConflictAlert({ conflicts, onClose }) {
 
 // ── Add Class Form ────────────────────────────────────────────────────────
 function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading }) {
+  const { isMobile } = useResponsive();
   const [formBatch,      setFormBatch]      = useState(selectedBatch||'');
   const [formSemester,   setFormSemester]   = useState(semester||1);
   const [batchCourses,   setBatchCourses]   = useState([]);

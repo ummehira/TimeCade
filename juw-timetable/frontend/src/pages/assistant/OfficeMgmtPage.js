@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { GraduationCap, Users, BookOpen, Building2, Clock, Plus, Pencil, Check, X, Trash2 } from 'lucide-react';
 import api from '../../utils/api';
+import { useResponsive } from '../../hooks/useResponsive';
 
 const fl = { fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px',color:'#5a7080',display:'block',marginBottom:'5px' };
 const fi = { width:'100%',padding:'9px 11px',border:'1px solid #dde3e8',borderRadius:'7px',fontSize:'12px',fontFamily:'inherit',color:'#1a2e3a',outline:'none',background:'white',boxSizing:'border-box' };
@@ -90,6 +91,7 @@ export default function OfficeMgmtPage({ tab: propTab }) {
 
 // ── BATCH TAB ─────────────────────────────────────────────────────────────
 function BatchTab() {
+  const { isMobile } = useResponsive();
   const [batches,    setBatches]    = useState([]);
   const [depts,      setDepts]      = useState([]);
   const [subjects,   setSubjects]   = useState([]);
@@ -317,6 +319,7 @@ function BatchTab() {
 
 // ── TEACHER TAB ───────────────────────────────────────────────────────────
 function TeacherTab() {
+  const { isMobile } = useResponsive();
   const [teachers,   setTeachers]  = useState([]);
   const [depts,      setDepts]     = useState([]);
   const [subjects,   setSubjects]  = useState([]);
@@ -442,6 +445,7 @@ function TeacherTab() {
 
 // ── COURSE TAB ────────────────────────────────────────────────────────────
 function CourseTab() {
+  const { isMobile } = useResponsive();
   const [subjects,    setSubjects]  = useState([]);
   const [depts,       setDepts]     = useState([]);
   const [teachers,    setTeachers]  = useState([]);
@@ -612,6 +616,7 @@ function CourseTab() {
 
 // ── CLASSROOM TAB ─────────────────────────────────────────────────────────
 function ClassroomTab() {
+  const { isMobile } = useResponsive();
   const [rooms,setRooms]       = useState([]);
   const [form,setForm]         = useState({ room_id:'',room_name:'',capacity:50,room_type:'classroom' });
   const [editId,setEditId]     = useState(null);
@@ -687,6 +692,7 @@ function ClassroomTab() {
 
 // ── ENROLLMENT TAB ────────────────────────────────────────────────────────
 function EnrollmentTab() {
+  const { isMobile } = useResponsive();
   const [batches,  setBatches]  = useState([]);
   const [depts,    setDepts]    = useState([]);
   const [students, setStudents] = useState([]);
@@ -887,6 +893,7 @@ function SummaryItem({ label, value }) {
 }
 
 function ApprovalsTab({ onCountChange }) {
+  const { isMobile } = useResponsive();
   const [requests,setRequests]=useState([]);
   const [loading,setLoading]=useState(true);
   const [reviewing,setReviewing]=useState(null);
