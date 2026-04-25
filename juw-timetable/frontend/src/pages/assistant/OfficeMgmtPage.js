@@ -255,7 +255,7 @@ function BatchTab() {
         <div style={card}>
           <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Batch</div>
           <form onSubmit={handleSubmit}>
-            <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'1fr 1fr 1fr 1fr 1fr',gap:'12px',marginBottom:'16px' }}>
+            <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr 1fr 1fr',gap:'12px',marginBottom:'16px' }}>
               <div><label style={fl}>Batch Name</label><input style={fi} placeholder="e.g. BSCS-2025" value={form.batch_name} onChange={e=>setForm(f=>({...f,batch_name:e.target.value}))}/></div>
               <div><label style={fl}>Major *</label>
                 <select style={fi} required value={form.major_code} onChange={e=>handleMajor(e.target.value)}>
