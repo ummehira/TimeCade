@@ -40,7 +40,14 @@ export default function AssistantDashboard() {
     <div style={{ display:'flex', minHeight:'100vh' }}>
 
       {/* ── Sidebar ── */}
-      <aside style={{ width:'220px', background:'#2d4a5a', display:'flex', flexDirection:'column', position:'fixed', top:0, left:0, height:'100vh', zIndex:100, boxShadow:'2px 0 12px rgba(0,0,0,0.15)' }}>
+      {/* Mobile overlay */}
+      {isMobile && sidebarOpen && (
+        <div onClick={()=>setSidebarOpen(false)}
+          style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:99 }}/>
+      )}
+      <aside style={{ width:'220px', background:'#2d4a5a', display:'flex', flexDirection:'column', position:'fixed', top:0, left:0, height:'100vh', zIndex:100, boxShadow:'2px 0 12px rgba(0,0,0,0.15)',
+        transform: isMobile ? (sidebarOpen ? 'translateX(0)' : 'translateX(-220px)') : 'translateX(0)',
+        transition:'transform 0.28s cubic-bezier(0.4,0,0.2,1)' }}>
 
         {/* Logo */}
         <div style={{ padding:'16px 14px', borderBottom:'1px solid rgba(255,255,255,0.08)', display:'flex', flexDirection:'column', alignItems:'center' }}>
@@ -94,11 +101,11 @@ export default function AssistantDashboard() {
       </aside>
 
       {/* ── Main content ── */}
-      <div style={{ marginLeft:'220px', flex:1, display:'flex', flexDirection:'column', minHeight:'100vh', background:'#f0f4f7' }}>
+      <div style={{ marginLeft: isMobile ? 0 : '220px', flex:1, display:'flex', flexDirection:'column', minHeight:'100vh', background:'#f0f4f7', width: isMobile ? '100%' : 'calc(100% - 220px)' }}>
         <Routes>
-          <Route index            element={<><TopHeader title="Dashboard"         icon={LayoutDashboard}/><AssistantHome/></>}/>
-          <Route path="timetable" element={<><TopHeader title="Timetable"         icon={Calendar}/><TimetablePage canEdit={true}/></>}/>
-          <Route path="office/*"  element={<><TopHeader title="Office Management" icon={Building2}/><OfficeMgmtPage/></>}/>
+          <Route index            element={<><TopHeader title="Dashboard"         icon={LayoutDashboard} onMenuClick={isMobile?()=>setSidebarOpen(o=>!o):null}/><AssistantHome/></>}/>
+          <Route path="timetable" element={<><TopHeader title="Timetable"         icon={Calendar}        onMenuClick={isMobile?()=>setSidebarOpen(o=>!o):null}/><TimetablePage canEdit={true}/></>}/>
+          <Route path="office/*"  element={<><TopHeader title="Office Management" icon={Building2}       onMenuClick={isMobile?()=>setSidebarOpen(o=>!o):null}/><OfficeMgmtPage/></>}/>
         </Routes>
       </div>
     </div>

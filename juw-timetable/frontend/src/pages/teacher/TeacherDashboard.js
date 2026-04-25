@@ -40,7 +40,14 @@ function TeacherSidebar() {
     { to:'/teacher/all-rooms',     label:'Room Status',    icon:Building2 },
   ];
   return (
-    <aside style={{ width:'210px',background:'#2d4a5a',display:'flex',flexDirection:'column',position:'fixed',top:0,left:0,height:'100vh',zIndex:100,boxShadow:'2px 0 12px rgba(0,0,0,0.15)' }}>
+    <div style={{ display:'flex', minHeight:'100vh' }}>
+      {isMobile && sidebarOpen && (
+        <div onClick={()=>setSidebarOpen(false)}
+          style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:99 }}/>
+      )}
+      <aside style={{ width:'210px',background:'#2d4a5a',display:'flex',flexDirection:'column',position:'fixed',top:0,left:0,height:'100vh',zIndex:100,boxShadow:'2px 0 12px rgba(0,0,0,0.15)',
+        transform: isMobile ? (sidebarOpen ? 'translateX(0)' : 'translateX(-210px)') : 'translateX(0)',
+        transition:'transform 0.28s cubic-bezier(0.4,0,0.2,1)' }}>
       <div style={{ padding:'16px 14px',borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',flexDirection:'column',alignItems:'center' }}>
         <div style={{ width:'44px',height:'44px',background:'rgba(255,255,255,0.15)',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',fontWeight:'800',color:'white',margin:'0 auto 8px' }}>T</div>
         <div style={{ color:'white',fontSize:'14px',fontWeight:'700',textAlign:'center',lineHeight:1 }}>Timecade</div>
@@ -80,6 +87,7 @@ function TeacherSidebar() {
       </div>
       {showProfile && <ProfileModal onClose={()=>setShowProfile(false)}/>}
     </aside>
+    </div>
   );
 }
 
@@ -615,15 +623,16 @@ function RoomStatusPage() {
 
 // ── Entry Point ───────────────────────────────────────────────────────────
 export default function TeacherDashboard() {
+  const { isMobile } = useResponsive();
   return (
     <div style={{ display:'flex',minHeight:'100vh' }}>
       <TeacherSidebar/>
-      <div style={{ marginLeft:'210px',flex:1,display:'flex',flexDirection:'column',minHeight:'100vh',background:'#f0f4f7' }}>
+      <div style={{ marginLeft: isMobile ? 0 : '210px', flex:1, display:'flex', flexDirection:'column', minHeight:'100vh', background:'#f0f4f7' }}>
         <Routes>
-          <Route index                element={<><TopHeader title="Teacher Dashboard"  icon={LayoutDashboard}/><TeacherHome/></>}/>
-          <Route path="schedule"      element={<><TopHeader title="My Schedule"         icon={Calendar}/><TeacherSchedulePage/></>}/>
-          <Route path="all-batches"   element={<><TopHeader title="Batch Timetable"    icon={Users}/><AllBatchesPage/></>}/>
-          <Route path="all-rooms"     element={<><TopHeader title="Room Status"        icon={Building2}/><RoomStatusPage/></>}/>
+          <Route index             element={<TeacherHome/>}/>
+          <Route path="schedule"   element={<TeacherSchedulePage/>}/>
+          <Route path="all-batches" element={<AllBatchesPage/>}/>
+          <Route path="all-rooms"  element={<RoomStatusPage/>}/>
         </Routes>
       </div>
     </div>
