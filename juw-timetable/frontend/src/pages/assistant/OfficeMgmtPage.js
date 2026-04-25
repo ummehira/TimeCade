@@ -200,7 +200,7 @@ function BatchTab() {
           </div>
 
           {/* Editable fields */}
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'16px' }}>
+          <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'12px',marginBottom:'16px' }}>
             <div>
               <label style={fl}>Batch Name</label>
               <input style={fi} value={editForm.batch_name} onChange={e=>setEditForm(f=>({...f,batch_name:e.target.value}))}/>
@@ -253,7 +253,7 @@ function BatchTab() {
         <div style={card}>
           <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Batch</div>
           <form onSubmit={handleSubmit}>
-            <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr',gap:'12px',marginBottom:'16px' }}>
+            <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'1fr 1fr 1fr 1fr 1fr',gap:'12px',marginBottom:'16px' }}>
               <div><label style={fl}>Batch Name</label><input style={fi} placeholder="e.g. BSCS-2025" value={form.batch_name} onChange={e=>setForm(f=>({...f,batch_name:e.target.value}))}/></div>
               <div><label style={fl}>Major *</label>
                 <select style={fi} required value={form.major_code} onChange={e=>handleMajor(e.target.value)}>
@@ -364,7 +364,7 @@ function TeacherTab() {
         <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Teacher</div>
         {m&&<div style={msg(m.ok)}>{m.ok?<Check size={13}/>:<X size={13}/>} {m.text}</div>}
         <form onSubmit={handleAdd}>
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:'12px',marginBottom:'16px' }}>
+          <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'1fr 1fr 1fr 1fr',gap:'12px',marginBottom:'16px' }}>
             <div><label style={fl}>Teacher ID *</label><input style={fi} placeholder="e.g. T037" value={form.teacher_id} onChange={e=>setForm(f=>({...f,teacher_id:e.target.value}))} required/></div>
             <div><label style={fl}>Full Name *</label><input style={fi} placeholder="Ms. Jane Doe" value={form.full_name} onChange={e=>setForm(f=>({...f,full_name:e.target.value}))} required/></div>
             <div><label style={fl}>Department *</label>
@@ -733,7 +733,7 @@ function EnrollmentTab() {
             <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',display:'flex',alignItems:'center',gap:'7px' }}><Pencil size={14}/> Editing: {editStu.student_id} — {editStu.full_name}</div>
             <button onClick={()=>setEditStu(null)} style={{ background:'#f0f4f7',border:'1px solid #dde3e8',color:'#5a7080',borderRadius:'6px',padding:'4px 10px',fontSize:'11px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'4px' }}><X size={11}/> Cancel</button>
           </div>
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:'10px',marginBottom:'12px' }}>
+          <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'1fr 1fr 1fr 1fr',gap:'10px',marginBottom:'12px' }}>
             <div><label style={fl}>Full Name</label><input style={fi} value={editForm.full_name||''} onChange={e=>setEditForm(f=>({...f,full_name:e.target.value}))}/></div>
             <div><label style={fl}>Email</label><input style={fi} type="email" value={editForm.email||''} onChange={e=>setEditForm(f=>({...f,email:e.target.value}))}/></div>
             <div><label style={fl}>Batch</label><select style={fi} value={editForm.batch_id||''} onChange={e=>setEditForm(f=>({...f,batch_id:e.target.value}))}><option value="">Select</option>{batches.map(b=><option key={b.id} value={b.id}>{b.batch_name}</option>)}</select></div>
@@ -842,7 +842,7 @@ function EnrollBulk({ batches, onSuccess, onError }) {
         <strong>Required columns:</strong>
         <div style={{ display:'flex',gap:'5px',flexWrap:'wrap',marginTop:'6px' }}>{['first_name','last_name','email','student_id','department'].map(c=><code key={c} style={{ background:'#dbeafe',padding:'2px 7px',borderRadius:'4px',fontSize:'11px' }}>{c}</code>)}</div>
       </div>
-      <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px' }}>
+      <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'16px' }}>
         <div>
           <div style={{ marginBottom:'12px' }}><label style={fl}>Select Batch</label><select style={fi} value={batchId} onChange={e=>setBatchId(e.target.value)}><option value="">Select Batch</option>{batches.map(b=><option key={b.id} value={b.id}>{b.batch_name}</option>)}</select></div>
           <div onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={e=>{e.preventDefault();setDragOver(false);handleFile(e.dataTransfer.files[0]);}} onClick={()=>fileRef.current?.click()}

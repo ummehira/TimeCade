@@ -274,10 +274,10 @@ export default function LandingPage() {
       {/* ── NAVBAR ── */}
       <nav style={S.nav}>
         <div style={S.navLogo}>
-          <img src="/logo.jpeg" alt="Timecade" style={S.navLogoImg} />
+          <img src="/logo.png" alt="Timecade" style={S.navLogoImg} />
           <div>
             <div style={S.navLogoName}>Timecade</div>
-            <div style={S.navLogoSub}>Schedules in perfect cascade</div>
+            <div style={S.navLogoSub}>Smart Timetable Management</div>
           </div>
         </div>
         <div style={S.navLinks}>
@@ -298,7 +298,7 @@ export default function LandingPage() {
             Schedules in<br />perfect cascade
           </h1>
           <p style={S.heroP}>
-            The ultimate timetable management system designed for Computer Science and Software Engineering department. Manage classes, track conflicts, and optimise schedules effortlessly.
+            The ultimate timetable management system designed for Computer Science and Software Engineering departments. Manage classes, track conflicts, and optimise schedules effortlessly.
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
             <Link to="/login" style={{ textDecoration: 'none' }}>
@@ -378,7 +378,7 @@ export default function LandingPage() {
             {/* Brand */}
             <div>
               <div style={S.footerLogoRow}>
-                <img src="/logo.jpeg" alt="Timecade" style={S.footerLogoImg} />
+                <img src="/logo.png" alt="Timecade" style={S.footerLogoImg} />
                 <span style={S.footerBrand}>Timecade</span>
               </div>
               <p style={S.footerP}>

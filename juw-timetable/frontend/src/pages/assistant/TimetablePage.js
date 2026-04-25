@@ -1,6 +1,7 @@
 // frontend/src/pages/assistant/TimetablePage.js
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../utils/api';
+import { useResponsive } from '../../hooks/useResponsive';
 import SearchSelect from '../../components/common/SearchSelect';
 
 const DAYS  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -92,7 +93,7 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
       <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'14px' }}>Add New Class</div>
 
       {/* Batch + Session */}
-      <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'12px',padding:'12px',background:'#f8fafc',borderRadius:'8px',border:'1px solid #e8edf0' }}>
+      <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'10px',marginBottom:'12px',padding:'12px',background:'#f8fafc',borderRadius:'8px',border:'1px solid #e8edf0' }}>
         <div>
           <label style={fl}>Batch *</label>
           <select value={formBatch||''} onChange={e=>{ setFormBatch(parseInt(e.target.value)||''); setFormSemester(1); }} style={fi}>
@@ -111,7 +112,7 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
       </div>
 
       {/* Course + Teacher */}
-      <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'10px' }}>
+      <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'10px',marginBottom:'10px' }}>
         <div>
           <label style={fl}>Course {formBatch&&batchCourses.length===0&&<span style={{ color:'#d97706',fontWeight:'400',textTransform:'none' }}>(assign subjects first)</span>}</label>
           <select value={form.subject_id} onChange={e=>set('subject_id',e.target.value)} disabled={!formBatch} style={{ ...fi,background:!formBatch?'#f8fafc':'white' }}>
@@ -377,7 +378,7 @@ function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, 
       )}
 
       <div style={{ borderRadius:'10px',overflow:'hidden',border:'1px solid #dde3e8' }}>
-        <div style={{ width:'100%',overflowX:'auto' }}>
+        <div style={{ width:'100%',overflowX:'auto',WebkitOverflowScrolling:'touch' }}>
           <table style={{ width:'100%',borderCollapse:'collapse',tableLayout:'fixed' }}>
             <colgroup>
               <col style={{ width:'100px' }}/>
@@ -646,8 +647,27 @@ export default function TimetablePage({ canEdit=false }) {
               )}
             </div>
 
+            {/* Search bar */}
+            <div style={{ position:'relative',marginBottom:'12px' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#aabbc8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                style={{ position:'absolute',left:'11px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none' }}>
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
+                placeholder="Search by subject, teacher or room..."
+                style={{ width:'100%',padding:'8px 12px 8px 34px',border:'1px solid #dde3e8',borderRadius:'7px',fontSize:'12px',fontFamily:'inherit',color:'#1a2e3a',outline:'none',background:'white',boxSizing:'border-box' }}
+              />
+              {searchQuery&&(
+                <button onClick={()=>setSearchQuery('')}
+                  style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#aabbc8',display:'flex',alignItems:'center',padding:0 }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              )}
+            </div>
+
             {/* Filter dropdowns */}
-            <div style={{ display:'flex',gap:'12px',flexWrap:'wrap',alignItems:'flex-end' }}>
+            <div style={{ display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'flex-end' }}>
               <div style={{ display:'flex',flexDirection:'column',gap:'4px' }}>
                 <span style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px' }}>Batch</span>
                 <SearchableSelect label="Batch" placeholder="All Batches"

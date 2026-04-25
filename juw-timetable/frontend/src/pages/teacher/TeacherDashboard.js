@@ -1,8 +1,10 @@
 // frontend/src/pages/teacher/TeacherDashboard.js
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, NavLink, useNavigate } from 'react-router-dom';
+import { Menu } from 'lucide-react';
 import { LayoutDashboard, Calendar, LogOut, Clock, BookOpen, Users, Building2, Settings } from 'lucide-react';
 import ProfileModal from '../../components/common/ProfileModal';
+import { useResponsive } from '../../hooks/useResponsive';
 import NotificationBell from '../../components/common/NotificationBell';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
@@ -28,6 +30,8 @@ function TeacherSidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [showProfile, setShowProfile] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { isMobile } = useResponsive();
   const initials = user?.full_name?.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase() || 'T';
   const NAV = [
     { to:'/teacher',               label:'Dashboard',      icon:LayoutDashboard, exact:true },
@@ -451,6 +455,24 @@ function AllBatchesPage() {
             )}
           </div>
 
+          {/* Quick pills */}
+          {batches.length>0&&(
+            <div style={{ marginBottom:'18px' }}>
+              <div style={{ fontSize:'11px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'8px' }}>Quick Select</div>
+              <div style={{ display:'flex',gap:'6px',flexWrap:'wrap' }}>
+                {batches.map(b=>(
+                  <button key={b.id} onClick={()=>setSelBatch(String(b.id))}
+                    style={{ padding:'4px 12px',borderRadius:'6px',border:'1px solid',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',
+                      background:String(selBatch)===String(b.id)?'#2d4a5a':'white',
+                      color:String(selBatch)===String(b.id)?'white':'#4a6070',
+                      borderColor:String(selBatch)===String(b.id)?'#2d4a5a':'#c8d8e0' }}>
+                    {b.batch_name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Semester selector */}
           {selBatch && (
             <div style={{ marginBottom:'16px',display:'flex',alignItems:'center',gap:'12px' }}>
@@ -544,6 +566,25 @@ function RoomStatusPage() {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Room pills */}
+          <div style={{ marginBottom:'18px' }}>
+            <div style={{ fontSize:'11px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'8px' }}>All Rooms</div>
+            <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:'8px' }}>
+              {rooms.map(r=>(
+                <div key={r.id} onClick={()=>setSelRoom(String(r.id))}
+                  style={{ background:String(selRoom)===String(r.id)?'#2d4a5a':'white',
+                    border:`1.5px solid ${String(selRoom)===String(r.id)?'#2d4a5a':r.is_available?'#c8d8e0':'#fca5a5'}`,
+                    borderRadius:'8px',padding:'10px 12px',cursor:'pointer',transition:'all 0.15s',
+                    boxShadow:String(selRoom)===String(r.id)?'0 0 0 3px rgba(45,74,90,0.15)':'none' }}>
+                  <div style={{ fontSize:'13px',fontWeight:'700',color:String(selRoom)===String(r.id)?'white':'#1a2e3a' }}>{r.room_id}</div>
+                  <div style={{ fontSize:'9px',marginTop:'3px',fontWeight:'600',color:String(selRoom)===String(r.id)?'rgba(255,255,255,0.7)':r.is_available?'#16a34a':'#dc2626' }}>
+                    {r.is_available?'Free':'Occupied'} · {r.capacity}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Schedule grid */}

@@ -1,8 +1,10 @@
 // frontend/src/pages/student/StudentDashboard.js
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, NavLink, useNavigate } from 'react-router-dom';
+import { Menu } from 'lucide-react';
 import { LayoutDashboard, Calendar, BookOpen, LogOut, Clock, Users, Settings } from 'lucide-react';
 import ProfileModal from '../../components/common/ProfileModal';
+import { useResponsive } from '../../hooks/useResponsive';
 import NotificationBell from '../../components/common/NotificationBell';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
@@ -21,6 +23,8 @@ function StudentSidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [showProfile, setShowProfile] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { isMobile } = useResponsive();
   const initials = user?.full_name?.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase() || 'S';
 
   const NAV = [

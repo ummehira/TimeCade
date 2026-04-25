@@ -1,7 +1,8 @@
 // frontend/src/pages/assistant/AssistantDashboard.js
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Calendar, Building2, LogOut, Settings } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, LogOut, Settings, Menu, X } from 'lucide-react';
+import { useResponsive } from '../../hooks/useResponsive';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import TopHeader from '../../components/common/TopHeader';
@@ -21,6 +22,8 @@ export default function AssistantDashboard() {
   const navigate = useNavigate();
   const [pendingCount, setPendingCount] = useState(0);
   const [showProfile, setShowProfile]   = useState(false);
+  const [sidebarOpen, setSidebarOpen]   = useState(false);
+  const { isMobile } = useResponsive();
 
   useEffect(() => {
     const load = () => api.get('/approvals/pending').then(r => setPendingCount(r.data.length)).catch(() => {});
