@@ -792,6 +792,7 @@ function EnrollmentTab() {
 }
 
 function EnrollManual({ batches, depts, onSuccess, onError }) {
+  const { isMobile } = useResponsive();
   const [form,setForm]=useState({student_id:'',first_name:'',last_name:'',email:'',batch_id:'',department_id:''});
   const [loading,setLoading]=useState(false);
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
@@ -814,6 +815,7 @@ function EnrollManual({ batches, depts, onSuccess, onError }) {
 }
 
 function EnrollBulk({ batches, onSuccess, onError }) {
+  const { isMobile } = useResponsive();
   const [batchId,setBatchId]=useState('');
   const [file,setFile]=useState(null);
   const [loading,setLoading]=useState(false);
