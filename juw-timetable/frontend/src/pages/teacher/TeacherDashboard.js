@@ -19,8 +19,8 @@ const SLOTS = [
   { id:5, label:'1:00 - 2:00'   },
 ];
 
-const cellStyle = (isLab) => ({
-  background: isLab ? '#1a6e4a' : '#2d4a5a',
+const cellStyle = () => ({
+  background: '#2d4a5a',
   borderRadius:'5px', padding:'5px 7px', color:'white',
   fontSize:'10px', lineHeight:'1.3', height:'100%', boxSizing:'border-box'
 });
@@ -40,54 +40,66 @@ function TeacherSidebar() {
     { to:'/teacher/all-rooms',     label:'Room Status',    icon:Building2 },
   ];
   return (
-    <div style={{ display:'flex', minHeight:'100vh' }}>
+    <>
+      {/* Mobile overlay */}
       {isMobile && sidebarOpen && (
         <div onClick={()=>setSidebarOpen(false)}
           style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:99 }}/>
       )}
-      <aside style={{ width:'210px',background:'#2d4a5a',display:'flex',flexDirection:'column',position:'fixed',top:0,left:0,height:'100vh',zIndex:100,boxShadow:'2px 0 12px rgba(0,0,0,0.15)',
+      {/* Mobile hamburger button */}
+      {isMobile && (
+        <button onClick={()=>setSidebarOpen(o=>!o)}
+          style={{ position:'fixed',top:'12px',left:'12px',zIndex:200,background:'#f0f4f7',
+            border:'none',cursor:'pointer',color:'#2d4a5a',padding:'7px',borderRadius:'8px',
+            display:'flex',alignItems:'center',justifyContent:'center',
+            boxShadow:'0 2px 8px rgba(0,0,0,0.12)' }}>
+          <Menu size={20}/>
+        </button>
+      )}
+      <aside style={{ width:'210px',background:'#2d4a5a',display:'flex',flexDirection:'column',
+        position:'fixed',top:0,left:0,height:'100vh',zIndex:100,
+        boxShadow:'2px 0 12px rgba(0,0,0,0.15)',
         transform: isMobile ? (sidebarOpen ? 'translateX(0)' : 'translateX(-210px)') : 'translateX(0)',
         transition:'transform 0.28s cubic-bezier(0.4,0,0.2,1)' }}>
-      <div style={{ padding:'16px 14px',borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',flexDirection:'column',alignItems:'center' }}>
-        <div style={{ width:'44px',height:'44px',background:'rgba(255,255,255,0.15)',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',fontWeight:'800',color:'white',margin:'0 auto 8px' }}>T</div>
-        <div style={{ color:'white',fontSize:'14px',fontWeight:'700',textAlign:'center',lineHeight:1 }}>Timecade</div>
-        <div style={{ color:'rgba(255,255,255,0.45)',fontSize:'10px',marginTop:'3px',textAlign:'center' }}>CS & SE Department</div>
-      </div>
-      <nav style={{ flex:1,padding:'10px 8px',overflowY:'auto' }}>
-        {NAV.map(({ to, label, icon:Icon, exact }) => (
-          <NavLink key={to} to={to} end={!!exact}
-            style={({ isActive }) => ({
-              display:'flex',alignItems:'center',gap:'9px',padding:'9px 12px',
-              color:isActive?'white':'rgba(255,255,255,0.6)',textDecoration:'none',
-              fontSize:'12.5px',fontWeight:isActive?'600':'400',borderRadius:'7px',
-              marginBottom:'2px',background:isActive?'rgba(255,255,255,0.12)':'transparent',
-              transition:'all 0.15s'
-            })}>
-            <Icon size={15}/>{label}
-          </NavLink>
-        ))}
-      </nav>
-      <div style={{ padding:'12px 10px',borderTop:'1px solid rgba(255,255,255,0.08)' }}>
-        <div style={{ display:'flex',alignItems:'center',gap:'8px',marginBottom:'9px' }}>
-          <div style={{ width:'30px',height:'30px',borderRadius:'50%',background:'rgba(255,255,255,0.18)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',fontWeight:'700',color:'white',flexShrink:0 }}>{initials}</div>
-          <div style={{ flex:1,minWidth:0 }}>
-            <div style={{ color:'white',fontSize:'11px',fontWeight:'600',lineHeight:1.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{user?.full_name?.split(' ').slice(0,3).join(' ')}</div>
-            <div style={{ color:'rgba(255,255,255,0.45)',fontSize:'9px',marginTop:'2px' }}>Teacher</div>
+        <div style={{ padding:'16px 14px',borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',flexDirection:'column',alignItems:'center' }}>
+          <div style={{ width:'44px',height:'44px',background:'rgba(255,255,255,0.15)',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',fontWeight:'800',color:'white',margin:'0 auto 8px' }}>T</div>
+          <div style={{ color:'white',fontSize:'14px',fontWeight:'700',textAlign:'center',lineHeight:1 }}>Timecade</div>
+          <div style={{ color:'rgba(255,255,255,0.45)',fontSize:'10px',marginTop:'3px',textAlign:'center' }}>CS & SE Department</div>
+        </div>
+        <nav style={{ flex:1,padding:'10px 8px',overflowY:'auto' }}>
+          {NAV.map(({ to, label, icon:Icon, exact }) => (
+            <NavLink key={to} to={to} end={!!exact}
+              style={({ isActive }) => ({
+                display:'flex',alignItems:'center',gap:'9px',padding:'9px 12px',
+                color:isActive?'white':'rgba(255,255,255,0.6)',textDecoration:'none',
+                fontSize:'12.5px',fontWeight:isActive?'600':'400',borderRadius:'7px',
+                marginBottom:'2px',background:isActive?'rgba(255,255,255,0.12)':'transparent',
+                transition:'all 0.15s'
+              })}>
+              <Icon size={15}/>{label}
+            </NavLink>
+          ))}
+        </nav>
+        <div style={{ padding:'12px 10px',borderTop:'1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ display:'flex',alignItems:'center',gap:'8px',marginBottom:'9px' }}>
+            <div style={{ width:'30px',height:'30px',borderRadius:'50%',background:'rgba(255,255,255,0.18)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',fontWeight:'700',color:'white',flexShrink:0 }}>{initials}</div>
+            <div style={{ flex:1,minWidth:0 }}>
+              <div style={{ color:'white',fontSize:'11px',fontWeight:'600',lineHeight:1.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{user?.full_name?.split(' ').slice(0,3).join(' ')}</div>
+              <div style={{ color:'rgba(255,255,255,0.45)',fontSize:'9px',marginTop:'2px' }}>Teacher</div>
+            </div>
+            <button onClick={()=>setShowProfile(true)} title="Profile Settings"
+              style={{ background:'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.2)',color:'white',borderRadius:'6px',width:'28px',height:'28px',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0 }}>
+              <Settings size={13}/>
+            </button>
           </div>
-          <button onClick={()=>setShowProfile(true)} title="Profile Settings"
-            style={{ background:'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.2)',color:'white',borderRadius:'6px',width:'28px',height:'28px',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0 }}>
-            <Settings size={13}/>
+          <button onClick={()=>{ logout(); navigate('/login'); }}
+            style={{ width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',background:'#b91c1c',color:'white',border:'none',borderRadius:'6px',padding:'8px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit' }}>
+            <LogOut size={13}/> Logout
           </button>
         </div>
-
-        <button onClick={()=>{ logout(); navigate('/login'); }}
-          style={{ width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',background:'#b91c1c',color:'white',border:'none',borderRadius:'6px',padding:'8px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit' }}>
-          <LogOut size={13}/> Logout
-        </button>
-      </div>
-      {showProfile && <ProfileModal onClose={()=>setShowProfile(false)}/>}
-    </aside>
-    </div>
+        {showProfile && <ProfileModal onClose={()=>setShowProfile(false)}/>}
+      </aside>
+    </>
   );
 }
 
@@ -164,7 +176,7 @@ async function submitReschedule(entry, newDay, newSlot, note) {
 function WeeklyGrid({ entries, onReschedule }) {
   const today = new Date().toLocaleDateString('en-US',{weekday:'long'});
   return (
-    <div style={{ overflowX:'auto' }}>
+    <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
       <table style={{ width:'100%',borderCollapse:'collapse',minWidth:'700px',tableLayout:'fixed' }}>
         <thead><tr style={{ background:'#2d4a5a' }}>
           <th style={{ padding:'10px 12px',color:'white',fontSize:'11px',fontWeight:'700',textAlign:'center',width:'100px',border:'1px solid rgba(255,255,255,0.1)' }}>DAY</th>
@@ -174,7 +186,6 @@ function WeeklyGrid({ entries, onReschedule }) {
           {DAYS.map(day=>{
             const dayE=entries.filter(e=>e.day===day);
             const isToday=day===today;
-            // Track which slots are already covered by a lab colSpan
             const coveredSlots = new Set();
             dayE.forEach(e=>{ if(e.is_lab){ const s=parseInt(e.time_slot); coveredSlots.add(s+1); coveredSlots.add(s+2); } });
             return(
@@ -185,15 +196,13 @@ function WeeklyGrid({ entries, onReschedule }) {
                   {day}{isToday&&<div style={{ fontSize:'9px',color:'#4a7a93',fontWeight:'600' }}>Today</div>}
                 </td>
                 {SLOTS.map(slot=>{
-                  // Skip slots that are covered by a lab spanning from a previous slot
                   if(coveredSlots.has(slot.id)) return null;
                   const cell=dayE.find(e=>parseInt(e.time_slot)===parseInt(slot.id));
-                  // Lab sessions span 3 slots (3 hours)
                   const span = (cell?.is_lab) ? 3 : 1;
                   return(
                     <td key={slot.id} colSpan={span} style={{ border:'1px solid #e8edf0',padding:'3px',verticalAlign:'top',height:'80px',width:'160px' }}>
                       {cell&&(
-                        <div style={{ ...cellStyle(cell.is_lab), position:'relative' }}>
+                        <div style={{ ...cellStyle(), position:'relative' }}>
                           <div style={{ fontWeight:'700',fontSize:'10.5px',marginBottom:'2px' }}>{cell.short_name||cell.subject_name}</div>
                           <div style={{ opacity:0.8,fontSize:'9.5px' }}>{cell.teacher_name?.split(' ').slice(0,3).join(' ')}</div>
                           <div style={{ opacity:0.7,fontSize:'9px',marginTop:'1px' }}>{cell.room_code||cell.room_id}</div>
@@ -250,6 +259,7 @@ function TeacherHome() {
       {toast&&<div style={{ position:'fixed',top:'20px',right:'20px',background:'#16a34a',color:'white',padding:'11px 20px',borderRadius:'8px',fontWeight:'600',fontSize:'13px',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:8000 }}>{toast}</div>}
       {rescheduleEntry&&<RescheduleModal entry={rescheduleEntry} onClose={()=>setRescheduleEntry(null)} onSubmit={handleReschedule}/>}
 
+      {/* Stat cards — UNCHANGED except 2-col on mobile */}
       <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)',gap:'12px',marginBottom:'16px' }}>
         {[
           {label:'Classes This Week',value:entries.length,     color:'#2d4a5a',icon:Calendar },
@@ -267,6 +277,7 @@ function TeacherHome() {
         ))}
       </div>
 
+      {/* Profile + Today — UNCHANGED except stacks on mobile */}
       <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'260px 1fr',gap:'16px',marginBottom:'16px' }}>
         <div className="card">
           <div className="card-body" style={{ textAlign:'center',padding:'24px 20px' }}>
@@ -284,10 +295,10 @@ function TeacherHome() {
         </div>
         <div className="card">
           <div className="card-header"><h2 style={{ display:'flex',alignItems:'center',gap:'8px' }}><Clock size={15}/> Today — {today}</h2></div>
-          <div className="card-body" style={{ padding:0 }}>
+          <div className="card-body" style={{ padding:0,overflowX:'auto',WebkitOverflowScrolling:'touch' }}>
             {loading?<div style={{ padding:'28px',textAlign:'center' }}><div className="spinner" style={{ margin:'0 auto' }}></div></div>:
              todayClasses.length===0?<div style={{ padding:'28px',textAlign:'center',color:'#aabbc8',fontSize:'13px' }}>No classes today.</div>:(
-              <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
+              <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px',minWidth:'360px' }}>
                 <thead><tr style={{ background:'#f5f8fa' }}>
                   {['Time','Subject','Batch','Room',''].map(h=><th key={h} style={{ padding:'9px 14px',textAlign:'left',fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',borderBottom:'1px solid #e8edf0' }}>{h}</th>)}
                 </tr></thead>
@@ -308,12 +319,13 @@ function TeacherHome() {
         </div>
       </div>
 
-      <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px' }}>
+      {/* Subjects Teaching + Weekly Overview — UNCHANGED except stacks on mobile */}
+      <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'16px' }}>
         <div className="card">
           <div className="card-header"><h2 style={{ display:'flex',alignItems:'center',gap:'8px' }}><BookOpen size={15}/> Subjects Teaching</h2></div>
-          <div className="card-body" style={{ padding:0 }}>
+          <div className="card-body" style={{ padding:0,overflowX:'auto',WebkitOverflowScrolling:'touch' }}>
             {subjects.length===0?<div style={{ padding:'24px',textAlign:'center',color:'#aabbc8',fontSize:'13px' }}>No subjects assigned.</div>:(
-              <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
+              <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px',minWidth:'320px' }}>
                 <thead><tr style={{ background:'#f5f8fa' }}>
                   {['Subject','Batch','Room','Day','Time'].map(h=><th key={h} style={{ padding:'8px 14px',textAlign:'left',fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',borderBottom:'1px solid #e8edf0' }}>{h}</th>)}
                 </tr></thead>
@@ -356,6 +368,7 @@ function TeacherHome() {
 
 // ── My Schedule ───────────────────────────────────────────────────────────
 function TeacherSchedulePage() {
+  const { isMobile } = useResponsive();
   const [entries,setEntries]               = useState([]);
   const [loading,setLoading]               = useState(true);
   const [rescheduleEntry,setRescheduleEntry] = useState(null);
@@ -381,8 +394,8 @@ function TeacherSchedulePage() {
       </div>
       <div className="card">
         <div className="card-header"><h2 style={{ display:'flex',alignItems:'center',gap:'8px' }}><Calendar size={15}/> All Classes — List</h2></div>
-        <div className="card-body" style={{ padding:0,overflowX:'auto' }}>
-          <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
+        <div className="card-body" style={{ padding:0,overflowX:'auto',WebkitOverflowScrolling:'touch' }}>
+          <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px',minWidth:'480px' }}>
             <thead><tr style={{ background:'#2d4a5a',color:'white' }}>
               {['Subject','Batch','Day','Time','Room','Action'].map(h=><th key={h} style={{ padding:'10px 14px',textAlign:'left',fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px' }}>{h}</th>)}
             </tr></thead>
@@ -436,9 +449,7 @@ function AllBatchesPage() {
       <div className="card">
         <div className="card-header"><h2 style={{ display:'flex',alignItems:'center',gap:'8px' }}><Users size={15}/> Batch Timetable</h2></div>
         <div className="card-body">
-
-          {/* Dropdown filter */}
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px',marginBottom:'20px' }}>
+          <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'14px',marginBottom:'20px' }}>
             <div>
               <label style={{ fontSize:'11px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',display:'block',marginBottom:'6px' }}>Select Batch</label>
               <select value={selBatch} onChange={e=>setSelBatch(e.target.value)}
@@ -464,27 +475,23 @@ function AllBatchesPage() {
               </div>
             )}
           </div>
-
-          {/* Semester selector */}
           {selBatch && (
-            <div style={{ marginBottom:'16px',display:'flex',alignItems:'center',gap:'12px' }}>
-              <span style={{ fontSize:'11px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px' }}>Semester</span>
-              <div style={{ display:'flex',gap:'4px',flexWrap:'wrap' }}>
-                {[1,2,3,4,5,6,7,8].map(s=>(
-                  <button key={s} onClick={()=>setSelSemester(s)}
-                    style={{ width:'30px',height:'30px',borderRadius:'6px',border:'1px solid',fontSize:'11px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',
-                      background:selSemester===s?'#2d4a5a':'white',
-                      color:selSemester===s?'white':'#4a6070',
-                      borderColor:selSemester===s?'#2d4a5a':'#c8d8e0' }}>
-                    {s}
+            <div style={{ marginBottom:'16px',display:'flex',alignItems:'center',gap:'12px',flexWrap:'wrap' }}>
+              <span style={{ fontSize:'11px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px' }}>Session</span>
+              <div style={{ display:'flex',gap:'6px' }}>
+                {[{id:1,label:'Session 1'},{id:2,label:'Session 2'}].map(s=>(
+                  <button key={s.id} onClick={()=>setSelSemester(s.id)}
+                    style={{ padding:'6px 14px',borderRadius:'6px',border:'1px solid',fontSize:'11px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit',
+                      background:selSemester===s.id?'#2d4a5a':'white',
+                      color:selSemester===s.id?'white':'#4a6070',
+                      borderColor:selSemester===s.id?'#2d4a5a':'#c8d8e0' }}>
+                    {s.label}
                   </button>
                 ))}
               </div>
-              <span style={{ fontSize:'11px',color:'#aabbc8' }}>Showing Semester {selSemester}</span>
+              <span style={{ fontSize:'11px',color:'#aabbc8' }}>Showing {selSemester===1?'Session 1 (First Semester)':'Session 2 (Second Semester)'}</span>
             </div>
           )}
-
-          {/* Grid */}
           {!selBatch?(
             <div style={{ textAlign:'center',padding:'48px',color:'#aabbc8' }}>
               <Users size={36} style={{ display:'block',margin:'0 auto 12px',opacity:0.4 }}/>
@@ -495,7 +502,7 @@ function AllBatchesPage() {
           ):(
             <>
               <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'12px',display:'flex',alignItems:'center',gap:'8px' }}>
-                <Calendar size={15}/> {selBatchObj?.batch_name} — Semester {selSemester} Schedule
+                <Calendar size={15}/> {selBatchObj?.batch_name} — {selSemester===1?'Session 1':'Session 2'} Schedule
               </div>
               {entries.length===0?(
                 <div style={{ textAlign:'center',padding:'32px',color:'#aabbc8',fontSize:'13px' }}>No classes scheduled for this batch yet.</div>
@@ -536,9 +543,7 @@ function RoomStatusPage() {
       <div className="card">
         <div className="card-header"><h2 style={{ display:'flex',alignItems:'center',gap:'8px' }}><Building2 size={15}/> Room Status & Schedule</h2></div>
         <div className="card-body">
-
-          {/* Dropdown filter */}
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px',marginBottom:'20px' }}>
+          <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'14px',marginBottom:'20px' }}>
             <div>
               <label style={{ fontSize:'11px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',display:'block',marginBottom:'6px' }}>Select Room</label>
               <select value={selRoom} onChange={e=>setSelRoom(e.target.value)}
@@ -548,7 +553,7 @@ function RoomStatusPage() {
               </select>
             </div>
             {selRoomObj&&(
-              <div style={{ display:'flex',gap:'10px',alignItems:'flex-end' }}>
+              <div style={{ display:'flex',gap:'10px',alignItems:'flex-end',flexWrap:'wrap' }}>
                 <div style={{ background:'#f5f8fa',border:'1px solid #e0e8ed',borderRadius:'8px',padding:'12px 16px',flex:1 }}>
                   <div style={{ fontSize:'10px',color:'#7a9aaa',fontWeight:'600',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'3px' }}>Capacity</div>
                   <div style={{ fontSize:'15px',fontWeight:'700',color:'#1a2e3a' }}>{selRoomObj.capacity} students</div>
@@ -560,8 +565,6 @@ function RoomStatusPage() {
               </div>
             )}
           </div>
-
-          {/* Schedule grid */}
           {!selRoom?(
             <div style={{ textAlign:'center',padding:'48px',color:'#aabbc8' }}>
               <Building2 size={36} style={{ display:'block',margin:'0 auto 12px',opacity:0.4 }}/>
