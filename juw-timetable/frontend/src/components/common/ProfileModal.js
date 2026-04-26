@@ -1,5 +1,6 @@
 // frontend/src/components/common/ProfileModal.js
 import React, { useState } from 'react';
+import ReactDOM from 'react-dom';
 import { User, Lock, Eye, EyeOff, Check, X, Settings, Mail, Shield, Clock, Activity, KeyRound, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
@@ -162,8 +163,6 @@ function PasswordTab() {
   );
 }
 
-
-
 // ── Security Tab ───────────────────────────────────────────────────────────
 function SecurityTab({ user }) {
   const items = [
@@ -200,8 +199,11 @@ export default function ProfileModal({ onClose }) {
   const { user } = useAuth();
   const [tab, setTab] = useState('profile');
 
-  return (
-    <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999,padding:'20px' }}>
+  const modalContent = (
+    <div
+      style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999,padding:'20px' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}  // close on backdrop click
+    >
       <div style={{ background:'white',borderRadius:'16px',width:'100%',maxWidth:'480px',overflow:'hidden',boxShadow:'0 24px 60px rgba(0,0,0,0.25)' }}>
 
         {/* Header */}
@@ -240,4 +242,7 @@ export default function ProfileModal({ onClose }) {
       </div>
     </div>
   );
+
+  // ✅ Render via portal so it escapes any parent transform/filter/stacking context
+  return ReactDOM.createPortal(modalContent, document.body);
 }

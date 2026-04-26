@@ -17,7 +17,6 @@ const LAB_SLOTS = {
   2:'10:00 - 1:00 (Lab)',
   3:'11:00 - 2:00 (Lab)',
 };
-// Slots 4 and 5 are invalid for labs (would exceed 2:00 PM)
 const VALID_LAB_SLOTS = [1, 2, 3];
 const CELL_NAVY  = '#2d4a5a';
 const CELL_GREEN = '#1a6e4a';
@@ -58,14 +57,12 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
   const [batchDefaultRoom, setBatchDefaultRoom] = useState(null);
 
   useEffect(()=>{ if(selectedBatch) setFormBatch(selectedBatch); },[selectedBatch]);
-  useEffect(()=>{ setFormSemester(semester); },[semester]);
+  useEffect(()=>{ setFormSemester(semester||1); },[semester]);
 
   useEffect(()=>{
     if(!formBatch){ setBatchCourses([]); setBatchDefaultRoom(null); return; }
-    // Load courses for batch
     api.get('/assignments/batch-courses',{params:{batch_id:formBatch,semester:formSemester}})
       .then(r=>setBatchCourses(r.data)).catch(()=>setBatchCourses([]));
-    // Load batch default room from batches state
     const batch = batches.find(b=>String(b.id)===String(formBatch));
     const defRoom = batch?.default_room_id || null;
     setBatchDefaultRoom(defRoom ? String(defRoom) : null);
@@ -129,7 +126,8 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
           </select>
         </div>
       </div>
-      {/* Room info — shown as read-only from batch default */}
+
+      {/* Room info */}
       {batchDefaultRoom ? (
         <div style={{ background:'#f0fdf4',border:'1px solid #86efac',borderRadius:'7px',padding:'8px 14px',marginBottom:'10px',fontSize:'12px',color:'#166534',display:'flex',alignItems:'center',gap:'7px' }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
@@ -165,7 +163,6 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
           <input type="checkbox" checked={form.is_lab} onChange={e=>{
             const newIsLab = e.target.checked;
             set('is_lab', newIsLab);
-            // Clear time slot if it's invalid for a lab
             if(newIsLab && form.time_slot && !VALID_LAB_SLOTS.includes(parseInt(form.time_slot))){
               set('time_slot','');
             }
@@ -186,7 +183,6 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
   );
 }
 
-// ── Editable Class Card Popup ─────────────────────────────────────────────
 // ── Editable Class Card Popup ─────────────────────────────────────────────
 function EditCardPopup({ entry, teachers, rooms, onSave, onDelete, onClose }) {
   const [courseTeachers, setCourseTeachers] = useState([]);
@@ -220,7 +216,6 @@ function EditCardPopup({ entry, teachers, rooms, onSave, onDelete, onClose }) {
 
         {/* Body */}
         <div style={{ padding:'20px' }}>
-          {/* Info */}
           <div style={{ background:'#f8fafc',borderRadius:'8px',padding:'10px 14px',marginBottom:'16px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px',fontSize:'12px',color:'#5a7080' }}>
             <div>Batch: <strong style={{ color:'#1a2e3a' }}>{entry.batch_name||'—'}</strong></div>
             <div>Teacher: <strong style={{ color:'#1a2e3a' }}>{entry.teacher_name}</strong></div>
@@ -228,7 +223,6 @@ function EditCardPopup({ entry, teachers, rooms, onSave, onDelete, onClose }) {
             <div>Credits: <strong style={{ color:'#1a2e3a' }}>{entry.credit_hours||'—'}</strong></div>
           </div>
 
-          {/* Teacher */}
           <div style={{ marginBottom:'13px' }}>
             <label style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',display:'block',marginBottom:'5px' }}>Change Teacher</label>
             <select value={form.teacher_id} onChange={e=>set('teacher_id',parseInt(e.target.value))}
@@ -242,7 +236,6 @@ function EditCardPopup({ entry, teachers, rooms, onSave, onDelete, onClose }) {
             </select>
           </div>
 
-          {/* Room */}
           <div style={{ marginBottom:'20px' }}>
             <label style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',display:'block',marginBottom:'5px' }}>Change Room</label>
             <select value={form.room_id} onChange={e=>set('room_id',parseInt(e.target.value))}
@@ -253,7 +246,6 @@ function EditCardPopup({ entry, teachers, rooms, onSave, onDelete, onClose }) {
             </select>
           </div>
 
-          {/* Actions */}
           <div style={{ display:'flex',gap:'8px' }}>
             <button onClick={()=>onSave(entry.id,form)}
               style={{ flex:1,background:'#2d4a5a',color:'white',border:'none',padding:'11px',borderRadius:'8px',fontSize:'13px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px' }}>
@@ -271,8 +263,6 @@ function EditCardPopup({ entry, teachers, rooms, onSave, onDelete, onClose }) {
     </div>
   );
 }
-
-
 
 // ── Searchable dropdown ────────────────────────────────────────────────────
 function SearchableSelect({ label, value, onChange, options, placeholder='All' }) {
@@ -305,7 +295,6 @@ function SearchableSelect({ label, value, onChange, options, placeholder='All' }
       {open&&(
         <div style={{ position:'absolute',top:'calc(100% + 4px)',left:0,minWidth:'100%',background:'white',
           border:'1px solid #dde3e8',borderRadius:'8px',boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:9999,overflow:'hidden' }}>
-          {/* Search input */}
           <div style={{ padding:'8px',borderBottom:'1px solid #f0f4f7' }}>
             <div style={{ position:'relative' }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#aabbc8" strokeWidth="2.5"
@@ -318,7 +307,6 @@ function SearchableSelect({ label, value, onChange, options, placeholder='All' }
                   fontSize:'11px',fontFamily:'inherit',outline:'none',boxSizing:'border-box',color:'#1a2e3a' }}/>
             </div>
           </div>
-          {/* Options */}
           <div style={{ maxHeight:'180px',overflowY:'auto' }}>
             <div onClick={()=>{ onChange(''); setOpen(false); }}
               style={{ padding:'8px 12px',fontSize:'12px',cursor:'pointer',color:'#7a9aaa',fontStyle:'italic',
@@ -347,13 +335,12 @@ function SearchableSelect({ label, value, onChange, options, placeholder='All' }
   );
 }
 
-// ── Timetable Grid — Days vertical, Times horizontal ─────────────────────
+// ── Timetable Grid ────────────────────────────────────────────────────────
 function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, onDelete }) {
   const [dragOver,  setDragOver]  = useState(null);
   const [editEntry, setEditEntry] = useState(null);
   const dragRef = useRef(null);
 
-  // Build grid keyed by [day][slot]
   const grid = {};
   DAYS.forEach(d=>{ grid[d]={}; SLOTS.forEach(s=>{ grid[d][s.id]=[]; }); });
   entries.forEach(e=>{ const sl=parseInt(e.time_slot); if(grid[e.day]?.[sl]!==undefined) grid[e.day][sl].push(e); });
@@ -364,8 +351,7 @@ function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, 
   const onDropCell =(e,day,slot)=>{ e.preventDefault(); e.stopPropagation(); setDragOver(null); if(dragRef.current&&onDrop) onDrop(dragRef.current,day,slot); dragRef.current=null; };
   const onDragEnd  =()=>{ dragRef.current=null; setDragOver(null); };
 
-  const DAY_W  = 100; // px for day label column
-  const ROW_H  = 100; // px per day row
+  const ROW_H = 100;
 
   return (
     <>
@@ -385,7 +371,6 @@ function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, 
               <col style={{ width:'100px' }}/>
               {SLOTS.map(s=><col key={s.id} style={{ width:`${100/SLOTS.length}%` }}/>)}
             </colgroup>
-            {/* ── Time header ── */}
             <thead>
               <tr>
                 <th style={{ background:CELL_NAVY,padding:'12px 8px',textAlign:'center',border:'1px solid rgba(255,255,255,0.1)' }}>
@@ -399,10 +384,8 @@ function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, 
                 ))}
               </tr>
             </thead>
-            {/* ── Day rows ── */}
             <tbody>
               {DAYS.map(day=>{
-                // Build row cells — skip slots occupied by a lab's colSpan
                 const skipSlots = new Set();
                 const rowCells = [];
                 SLOTS.forEach(slot=>{
@@ -410,7 +393,6 @@ function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, 
                   const cells = grid[day][slot.id]||[];
                   const labEntry = cells.find(e=>e.is_lab);
                   if(labEntry){
-                    // Lab spans 3 columns
                     skipSlots.add(slot.id+1);
                     skipSlots.add(slot.id+2);
                     rowCells.push({ slot, cells, colSpan:3, isLab:true });
@@ -497,19 +479,17 @@ export default function TimetablePage({ canEdit=false }) {
   const [batches,       setBatches]       = useState([]);
   const [rooms,         setRooms]         = useState([]);
   const [teachers,      setTeachers]      = useState([]);
-  const [batchesData,   setBatchesData]   = useState([]); // full batch objects with room info
+  const [batchesData,   setBatchesData]   = useState([]);
   const [entries,       setEntries]       = useState([]);
   const [selBatch,      setSelBatch]      = useState(null);
-  const [selSemester,   setSelSemester]   = useState(1);
+  const [selSemester,   setSelSemester]   = useState(null); // null = all sessions by default
   const [filterTeacher, setFilterTeacher] = useState('');
   const [filterRoom,    setFilterRoom]    = useState('');
-  const [searchQuery,   setSearchQuery]   = useState('');
   const [conflicts,     setConflicts]     = useState([]);
   const [addLoading,    setAddLoading]    = useState(false);
   const [saveLoading,   setSaveLoading]   = useState(false);
   const [pendingMoves,  setPendingMoves]  = useState([]);
   const [toast,         setToast]         = useState({ msg:'', type:'' });
-  const filterBatch = selBatch;
 
   const showToast=(msg,type='success')=>{ setToast({msg,type}); setTimeout(()=>setToast({msg:'',type:''}),type==='error'?6000:3000); };
 
@@ -517,14 +497,13 @@ export default function TimetablePage({ canEdit=false }) {
     api.get('/office/batches').then(r=>{ setBatches(r.data); setBatchesData(r.data); });
     api.get('/office/rooms').then(r=>setRooms(r.data));
     api.get('/office/teachers').then(r=>setTeachers(r.data));
-    // Load saved batch room assignments from sessionStorage
   },[]);
 
   const loadEntries=useCallback(async()=>{
     if(!selBatch) return;
     try{
-      // Always load by batch, add semester filter only when one is selected
       const params = { batch_id: selBatch };
+      // Only add semester param if a specific session is selected
       if(selSemester) params.semester = selSemester;
       const r = await api.get('/timetable', { params });
       setEntries(r.data);
@@ -542,14 +521,6 @@ export default function TimetablePage({ canEdit=false }) {
     .filter(e=>{
       if(filterTeacher&&String(e.teacher_id)!==String(filterTeacher)) return false;
       if(filterRoom&&String(e.room_id)!==String(filterRoom)) return false;
-      if(searchQuery){
-        const q=searchQuery.toLowerCase();
-        const matchSubject = (e.subject_name||e.short_name||'').toLowerCase().includes(q);
-        const matchTeacher = (e.teacher_name||'').toLowerCase().includes(q);
-        const matchRoom    = (e.room_code||'').toLowerCase().includes(q);
-        const matchDay     = (e.day||'').toLowerCase().includes(q);
-        if(!matchSubject&&!matchTeacher&&!matchRoom&&!matchDay) return false;
-      }
       return true;
     });
 
@@ -562,10 +533,8 @@ export default function TimetablePage({ canEdit=false }) {
       showToast(form.is_lab?'Lab class added':'Class added');
       const newBatch = parseInt(form.batch_id);
       const newSem   = parseInt(form.semester)||1;
-      // Update filter selectors to match what was just added
       setSelBatch(newBatch);
       setSelSemester(newSem);
-      // Force immediate reload with exact params
       const r = await api.get('/timetable', { params: { batch_id: newBatch, semester: newSem } });
       setEntries(r.data);
       setPendingMoves([]);
@@ -586,7 +555,6 @@ export default function TimetablePage({ canEdit=false }) {
     }catch(_){ showToast('Could not check conflicts','error'); }
   };
 
-  // Save teacher/room changes from popup
   const handleSaveCard=async(id,{teacher_id,room_id})=>{
     try{
       const entry=entries.find(e=>e.id===id);
@@ -594,7 +562,7 @@ export default function TimetablePage({ canEdit=false }) {
         batch_id:entry.batch_id, subject_id:entry.subject_id,
         teacher_id, room_id,
         day:entry.day, time_slot:entry.time_slot, is_lab:entry.is_lab,
-        semester:selSemester
+        semester:entry.semester||selSemester
       });
       showToast('Class updated'); loadEntries();
     }catch(err){ showToast(err.response?.data?.message||'Error saving','error'); }
@@ -606,7 +574,7 @@ export default function TimetablePage({ canEdit=false }) {
     let saved=0,failed=0;
     for(const{entry,newDay,newSlot}of pendingMoves){
       try{
-        await api.put(`/timetable/${entry.id}`,{batch_id:entry.batch_id,subject_id:entry.subject_id,teacher_id:entry.teacher_id,room_id:entry.room_id,day:newDay,time_slot:newSlot,is_lab:entry.is_lab,semester:selSemester});
+        await api.put(`/timetable/${entry.id}`,{batch_id:entry.batch_id,subject_id:entry.subject_id,teacher_id:entry.teacher_id,room_id:entry.room_id,day:newDay,time_slot:newSlot,is_lab:entry.is_lab,semester:entry.semester||selSemester});
         saved++;
       }catch(err){ failed++; const e=err.response?.data?.conflicts; if(e?.length) setConflicts(c=>[...c,...e]); }
     }
@@ -619,6 +587,8 @@ export default function TimetablePage({ canEdit=false }) {
   const handleDelete=async id=>{ setPendingMoves(p=>p.filter(m=>m.entry.id!==id)); try{ await api.delete(`/timetable/${id}`); showToast('Class removed'); loadEntries(); }catch{ showToast('Failed to remove','error'); } };
 
   const toastBg={success:'#16a34a',error:'#dc2626',info:'#2d4a5a'}[toast.type]||'#16a34a';
+
+  const hasActiveFilters = filterTeacher || filterRoom;
 
   return (
     <div className="page-content">
@@ -643,27 +613,8 @@ export default function TimetablePage({ canEdit=false }) {
               <div style={{ flex:1,height:'1px',background:'#e0e8ed',marginLeft:'4px' }}/>
               {selBatch&&selBatchObj&&(
                 <span style={{ fontSize:'11px',color:'#7a9aaa',background:'#f0f4f7',padding:'3px 10px',borderRadius:'10px' }}>
-                  {selBatchObj.batch_name}{selSemester ? ` · Session ${selSemester}` : ''} · {entries.length} class{entries.length!==1?'es':''}
+                  {selBatchObj.batch_name}{selSemester ? ` · Session ${selSemester}` : ' · All Sessions'} · {entries.length} class{entries.length!==1?'es':''}
                 </span>
-              )}
-            </div>
-
-            {/* Search bar */}
-            <div style={{ position:'relative',marginBottom:'12px' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#aabbc8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                style={{ position:'absolute',left:'11px',top:'50%',transform:'translateY(-50%)',pointerEvents:'none' }}>
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-              <input
-                value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
-                placeholder="Search by subject, teacher or room..."
-                style={{ width:'100%',padding:'8px 12px 8px 34px',border:'1px solid #dde3e8',borderRadius:'7px',fontSize:'12px',fontFamily:'inherit',color:'#1a2e3a',outline:'none',background:'white',boxSizing:'border-box' }}
-              />
-              {searchQuery&&(
-                <button onClick={()=>setSearchQuery('')}
-                  style={{ position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#aabbc8',display:'flex',alignItems:'center',padding:0 }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
               )}
             </div>
 
@@ -673,7 +624,7 @@ export default function TimetablePage({ canEdit=false }) {
                 <span style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px' }}>Batch</span>
                 <SearchableSelect label="Batch" placeholder="All Batches"
                   value={selBatch||''}
-                  onChange={v=>{ if(pendingMoves.length&&!window.confirm('Switch batch? Unsaved changes will be lost.')) return; setSelBatch(parseInt(v)||null); setSelSemester(1); setSearchQuery(''); }}
+                  onChange={v=>{ if(pendingMoves.length&&!window.confirm('Switch batch? Unsaved changes will be lost.')) return; setSelBatch(parseInt(v)||null); setSelSemester(null); }}
                   options={batches.map(b=>({ value:b.id, label:b.batch_name }))}/>
               </div>
               <div style={{ display:'flex',flexDirection:'column',gap:'4px' }}>
@@ -697,12 +648,12 @@ export default function TimetablePage({ canEdit=false }) {
                   onChange={v=>setFilterRoom(v)}
                   options={rooms.map(r=>({ value:r.id, label:`${r.room_id} (Cap: ${r.capacity})` }))}/>
               </div>
-              {(filterTeacher||filterRoom||searchQuery)&&(
+              {hasActiveFilters&&(
                 <div style={{ display:'flex',flexDirection:'column',gap:'4px' }}>
                   <span style={{ fontSize:'10px',color:'transparent' }}>_</span>
-                  <button onClick={()=>{ setFilterTeacher(''); setFilterRoom(''); setSearchQuery(''); }}
+                  <button onClick={()=>{ setFilterTeacher(''); setFilterRoom(''); }}
                     style={{ padding:'7px 14px',border:'1px solid #fca5a5',borderRadius:'7px',fontSize:'11px',fontWeight:'600',cursor:'pointer',background:'#fef2f2',color:'#dc2626',fontFamily:'inherit' }}>
-                    Clear All
+                    Clear Filters
                   </button>
                 </div>
               )}
@@ -714,7 +665,7 @@ export default function TimetablePage({ canEdit=false }) {
             <ConflictAlert conflicts={conflicts} onClose={()=>setConflicts([])}/>
 
             {canEdit&&(
-              <AddClassForm rooms={rooms} selectedBatch={selBatch} semester={selSemester} batches={batches} onAdd={handleAdd} loading={addLoading}/>
+              <AddClassForm rooms={rooms} selectedBatch={selBatch} semester={selSemester||1} batches={batches} onAdd={handleAdd} loading={addLoading}/>
             )}
 
             {displayEntries.length===0?(
