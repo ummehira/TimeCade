@@ -227,6 +227,7 @@ function WeeklyGrid({ entries, onReschedule }) {
 // ── Teacher Home ──────────────────────────────────────────────────────────
 function TeacherHome() {
   const { user } = useAuth();
+  const { isMobile } = useResponsive();
   const [entries,setEntries]               = useState([]);
   const [loading,setLoading]               = useState(true);
   const [rescheduleEntry,setRescheduleEntry] = useState(null);
@@ -245,28 +246,28 @@ function TeacherHome() {
   };
 
   return (
-    <div className="page-content">
+    <div className="page-content" style={{ padding:isMobile?'12px':'20px' }}>
       {toast&&<div style={{ position:'fixed',top:'20px',right:'20px',background:'#16a34a',color:'white',padding:'11px 20px',borderRadius:'8px',fontWeight:'600',fontSize:'13px',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:8000 }}>{toast}</div>}
       {rescheduleEntry&&<RescheduleModal entry={rescheduleEntry} onClose={()=>setRescheduleEntry(null)} onSubmit={handleReschedule}/>}
 
-      <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'14px',marginBottom:'20px' }}>
+      <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)',gap:'12px',marginBottom:'16px' }}>
         {[
           {label:'Classes This Week',value:entries.length,     color:'#2d4a5a',icon:Calendar },
           {label:"Today's Classes",  value:todayClasses.length,color:'#4a7a93',icon:Clock    },
           {label:'Batches Teaching', value:batches.length,     color:'#3d6b7a',icon:Users    },
           {label:'Subjects',         value:subjects.length,    color:'#1e5a6e',icon:BookOpen },
         ].map(({label,value,color,icon:Icon})=>(
-          <div key={label} style={{ background:color,color:'white',borderRadius:'12px',padding:'18px 20px',display:'flex',alignItems:'center',justifyContent:'space-between' }}>
+          <div key={label} style={{ background:color,color:'white',borderRadius:'12px',padding:isMobile?'14px':'18px 20px',display:'flex',alignItems:'center',justifyContent:'space-between' }}>
             <div>
-              <div style={{ fontSize:'11px',opacity:0.75,fontWeight:'600',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'6px' }}>{label}</div>
-              <div style={{ fontSize:'30px',fontWeight:'800',lineHeight:1 }}>{loading?'—':value}</div>
+              <div style={{ fontSize:isMobile?'9px':'11px',opacity:0.75,fontWeight:'600',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'4px' }}>{label}</div>
+              <div style={{ fontSize:isMobile?'24px':'30px',fontWeight:'800',lineHeight:1 }}>{loading?'—':value}</div>
             </div>
-            <Icon size={28} style={{ opacity:0.25 }}/>
+            <Icon size={isMobile?20:28} style={{ opacity:0.25 }}/>
           </div>
         ))}
       </div>
 
-      <div style={{ display:'grid',gridTemplateColumns:'260px 1fr',gap:'16px',marginBottom:'16px' }}>
+      <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'260px 1fr',gap:'16px',marginBottom:'16px' }}>
         <div className="card">
           <div className="card-body" style={{ textAlign:'center',padding:'24px 20px' }}>
             <div style={{ width:'60px',height:'60px',background:'#2d4a5a',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'800',fontSize:'22px',margin:'0 auto 12px' }}>T</div>
@@ -365,7 +366,7 @@ function TeacherSchedulePage() {
   const handleReschedule=async(e,d,s,n)=>{ const m=await submitReschedule(e,d,s,n); showToast(m); };
 
   return (
-    <div className="page-content">
+    <div className="page-content" style={{ padding:isMobile?'12px':'20px' }}>
       {toast&&<div style={{ position:'fixed',top:'20px',right:'20px',background:'#16a34a',color:'white',padding:'11px 20px',borderRadius:'8px',fontWeight:'600',fontSize:'13px',zIndex:8000 }}>{toast}</div>}
       {rescheduleEntry&&<RescheduleModal entry={rescheduleEntry} onClose={()=>setRescheduleEntry(null)} onSubmit={handleReschedule}/>}
       <div className="card" style={{ marginBottom:'18px' }}>
@@ -407,6 +408,7 @@ function TeacherSchedulePage() {
 
 // ── Batch Timetable Page ──────────────────────────────────────────────────
 function AllBatchesPage() {
+  const { isMobile } = useResponsive();
   const [batches,     setBatches]     = useState([]);
   const [selBatch,    setSelBatch]    = useState('');
   const [selSemester, setSelSemester] = useState(1);
@@ -430,7 +432,7 @@ function AllBatchesPage() {
   const MAJORS=[{label:'Computer Science',code:'CS'},{label:'Software Engineering',code:'SE'},{label:'Data Science',code:'DS'}];
 
   return (
-    <div className="page-content">
+    <div className="page-content" style={{ padding:isMobile?'12px':'20px' }}>
       <div className="card">
         <div className="card-header"><h2 style={{ display:'flex',alignItems:'center',gap:'8px' }}><Users size={15}/> Batch Timetable</h2></div>
         <div className="card-body">
@@ -528,6 +530,7 @@ function AllBatchesPage() {
 
 // ── Room Status Page ──────────────────────────────────────────────────────
 function RoomStatusPage() {
+  const { isMobile } = useResponsive();
   const [rooms,    setRooms]   = useState([]);
   const [selRoom,  setSelRoom] = useState('');
   const [entries,  setEntries] = useState([]);
@@ -547,7 +550,7 @@ function RoomStatusPage() {
   const selRoomObj = rooms.find(r=>String(r.id)===String(selRoom));
 
   return (
-    <div className="page-content">
+    <div className="page-content" style={{ padding:isMobile?'12px':'20px' }}>
       <div className="card">
         <div className="card-header"><h2 style={{ display:'flex',alignItems:'center',gap:'8px' }}><Building2 size={15}/> Room Status & Schedule</h2></div>
         <div className="card-body">
