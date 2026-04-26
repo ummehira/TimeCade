@@ -11,7 +11,10 @@ router.get('/departments', authenticate, async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM departments ORDER BY name');
     res.json(r.rows);
-  } catch (err) { res.status(500).json({ message: 'Server error.' }); }
+  } catch (err) {
+    console.error('[GET /departments]', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
 });
 
 // ── Batches ───────────────────────────────────────────────────────────────
@@ -25,7 +28,10 @@ router.get('/batches', authenticate, async (req, res) => {
        ORDER BY b.year DESC, b.batch_name`
     );
     res.json(r.rows);
-  } catch (err) { res.status(500).json({ message: 'Server error.' }); }
+  } catch (err) {
+    console.error('[GET /batches]', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
 });
 
 router.post('/batches', authenticate, canEdit, async (req, res) => {
@@ -40,8 +46,9 @@ router.post('/batches', authenticate, canEdit, async (req, res) => {
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
+    console.error('[POST /batches]', err);
     if (err.code === '23505') return res.status(400).json({ message: 'Batch already exists.' });
-    res.status(500).json({ message: 'Server error.' });
+    res.status(500).json({ message: 'Server error: ' + err.message });
   }
 });
 
@@ -55,7 +62,10 @@ router.put('/batches/:id', authenticate, canEdit, async (req, res) => {
     );
     if (!r.rows.length) return res.status(404).json({ message: 'Batch not found.' });
     res.json(r.rows[0]);
-  } catch (err) { res.status(500).json({ message: 'Server error.' }); }
+  } catch (err) {
+    console.error('[PUT /batches/:id]', err);
+    res.status(500).json({ message: 'Server error: ' + err.message });
+  }
 });
 
 // ── Teachers ──────────────────────────────────────────────────────────────
@@ -73,7 +83,10 @@ router.get('/teachers', authenticate, async (req, res) => {
        ORDER BY te.full_name`
     );
     res.json(r.rows);
-  } catch (err) { res.status(500).json({ message: 'Server error.' }); }
+  } catch (err) {
+    console.error('[GET /teachers]', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
 });
 
 router.post('/teachers', authenticate, canEdit, async (req, res) => {
@@ -100,6 +113,7 @@ router.post('/teachers', authenticate, canEdit, async (req, res) => {
     if (!r.rows.length) return res.status(400).json({ message: 'Teacher ID already exists.' });
     res.status(201).json(r.rows[0]);
   } catch (err) {
+    console.error('[POST /teachers]', err);
     if (err.code === '23505') return res.status(400).json({ message: 'Teacher already exists.' });
     res.status(500).json({ message: 'Server error: ' + err.message });
   }
@@ -115,7 +129,10 @@ router.put('/teachers/:id', authenticate, canEdit, async (req, res) => {
     if (!r.rows.length) return res.status(404).json({ message: 'Teacher not found.' });
     await pool.query('UPDATE users SET full_name=$1 WHERE id=(SELECT user_id FROM teachers WHERE id=$2)', [full_name, req.params.id]);
     res.json(r.rows[0]);
-  } catch (err) { res.status(500).json({ message: 'Server error.' }); }
+  } catch (err) {
+    console.error('[PUT /teachers/:id]', err);
+    res.status(500).json({ message: 'Server error: ' + err.message });
+  }
 });
 
 // ── Subjects ──────────────────────────────────────────────────────────────
@@ -128,7 +145,10 @@ router.get('/subjects', authenticate, async (req, res) => {
        ORDER BY s.name`
     );
     res.json(r.rows);
-  } catch (err) { res.status(500).json({ message: 'Server error.' }); }
+  } catch (err) {
+    console.error('[GET /subjects]', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
 });
 
 router.post('/subjects', authenticate, canEdit, async (req, res) => {
@@ -142,22 +162,46 @@ router.post('/subjects', authenticate, canEdit, async (req, res) => {
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
+    console.error('[POST /subjects]', err);
     if (err.code === '23505') return res.status(400).json({ message: 'Subject already exists.' });
-    res.status(500).json({ message: 'Server error.' });
+    res.status(500).json({ message: 'Server error: ' + err.message });
   }
 });
 
 router.put('/subjects/:id', authenticate, canEdit, async (req, res) => {
   try {
     const { code, name, short_name, credit_hours, department_id, has_lab } = req.body;
+
+    // ── log exactly what we received so we can debug ──────────────────────
+    console.log('[PUT /subjects/:id] id:', req.params.id, 'body:', req.body);
+
+    // Guard: name is required
+    if (!name) return res.status(400).json({ message: 'name is required.' });
+
     const r = await pool.query(
-      `UPDATE subjects SET code=$1, name=$2, short_name=$3, credit_hours=$4,
-       department_id=$5, has_lab=$6 WHERE id=$7 RETURNING *`,
-      [code, name, short_name, credit_hours, department_id || null, has_lab || false, req.params.id]
+      `UPDATE subjects
+       SET code=$1, name=$2, short_name=$3, credit_hours=$4,
+           department_id=$5, has_lab=$6
+       WHERE id=$7
+       RETURNING *`,
+      [
+        code        || '',
+        name,
+        short_name  || name.slice(0, 8),
+        credit_hours ? parseInt(credit_hours) : 3,
+        department_id ? parseInt(department_id) : null,
+        has_lab === true || has_lab === 'true' ? true : false,
+        parseInt(req.params.id),   // ← ensure integer, never "32:1" style
+      ]
     );
+
     if (!r.rows.length) return res.status(404).json({ message: 'Subject not found.' });
     res.json(r.rows[0]);
-  } catch (err) { res.status(500).json({ message: 'Server error.' }); }
+  } catch (err) {
+    // ── now we'll actually see the real error in server logs ──────────────
+    console.error('[PUT /subjects/:id] ERROR:', err.message, '\nStack:', err.stack);
+    res.status(500).json({ message: 'Server error: ' + err.message });
+  }
 });
 
 // ── Rooms ─────────────────────────────────────────────────────────────────
@@ -165,7 +209,10 @@ router.get('/rooms', authenticate, async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM rooms ORDER BY room_id');
     res.json(r.rows);
-  } catch (err) { res.status(500).json({ message: 'Server error.' }); }
+  } catch (err) {
+    console.error('[GET /rooms]', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
 });
 
 router.post('/rooms', authenticate, canEdit, async (req, res) => {
@@ -179,8 +226,9 @@ router.post('/rooms', authenticate, canEdit, async (req, res) => {
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
+    console.error('[POST /rooms]', err);
     if (err.code === '23505') return res.status(400).json({ message: 'Room ID already exists.' });
-    res.status(500).json({ message: 'Server error.' });
+    res.status(500).json({ message: 'Server error: ' + err.message });
   }
 });
 
@@ -193,7 +241,10 @@ router.put('/rooms/:id', authenticate, canEdit, async (req, res) => {
     );
     if (!r.rows.length) return res.status(404).json({ message: 'Room not found.' });
     res.json(r.rows[0]);
-  } catch (err) { res.status(500).json({ message: 'Server error.' }); }
+  } catch (err) {
+    console.error('[PUT /rooms/:id]', err);
+    res.status(500).json({ message: 'Server error: ' + err.message });
+  }
 });
 
 // ── Room Schedule ─────────────────────────────────────────────────────────
@@ -232,12 +283,12 @@ router.get('/room-schedule', authenticate, async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error('getRoomSchedule:', err);
+    console.error('[GET /room-schedule]', err);
     res.status(500).json({ message: 'Server error.' });
   }
 });
 
-// ── Batch Timetable (bypasses role filter — for teacher views) ────────────
+// ── Batch Timetable ───────────────────────────────────────────────────────
 router.get('/batch-timetable', authenticate, async (req, res) => {
   try {
     const { batch_id, semester } = req.query;
@@ -279,10 +330,10 @@ router.get('/batch-timetable', authenticate, async (req, res) => {
       params
     );
 
-    console.log('[batch-timetable] found rows:', result.rows.length, 'for batch_id:', batch_id);
+    console.log('[batch-timetable] found rows:', result.rows.length);
     res.json(result.rows);
   } catch (err) {
-    console.error('batchTimetable error:', err);
+    console.error('[GET /batch-timetable]', err);
     res.status(500).json({ message: 'Server error: ' + err.message });
   }
 });
@@ -302,7 +353,10 @@ router.get('/stats', authenticate, async (req, res) => {
       totalRooms:    parseInt(rooms.rows[0].count),
       totalClasses:  parseInt(classes.rows[0].count),
     });
-  } catch (err) { res.status(500).json({ message: 'Server error.' }); }
+  } catch (err) {
+    console.error('[GET /stats]', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
 });
 
 module.exports = router;

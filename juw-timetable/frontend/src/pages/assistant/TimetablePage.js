@@ -18,8 +18,8 @@ const LAB_SLOTS = {
   3:'11:00 - 2:00 (Lab)',
 };
 const VALID_LAB_SLOTS = [1, 2, 3];
-const CELL_NAVY  = '#2d4a5a';
-const CELL_GREEN = '#1a6e4a';
+const CELL_NAVY  = '#184258';
+const CELL_GREEN = '#0f495d';
 
 // ── Conflict Alert ────────────────────────────────────────────────────────
 function ConflictAlert({ conflicts, onClose }) {
