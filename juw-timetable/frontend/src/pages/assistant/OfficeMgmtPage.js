@@ -42,6 +42,7 @@ function SectionLabel({ children, count }) {
 }
 
 export default function OfficeMgmtPage({ tab: propTab }) {
+  const { isMobile } = useResponsive();
   const [tab, setTab]             = useState(propTab||'batches');
   const [pendingCount,setPending] = useState(0);
   useEffect(()=>{ if(propTab) setTab(propTab); },[propTab]);
@@ -341,7 +342,8 @@ function TeacherTab() {
     e.preventDefault();
     if(selCourses.length===0){ setM({ok:false,text:'Please assign at least one course to this teacher.'}); return; }
     try{
-      await api.post('/office/teachers',form);
+      const dept_id = depts.length>0 ? depts[0].id : '';
+      await api.post('/office/teachers',{...form,department_id:dept_id});
       const tRes=await api.get('/office/teachers');
       const newT=tRes.data.find(t=>t.teacher_id===form.teacher_id);
       if(newT){
@@ -367,14 +369,9 @@ function TeacherTab() {
         <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Teacher</div>
         {m&&<div style={msg(m.ok)}>{m.ok?<Check size={13}/>:<X size={13}/>} {m.text}</div>}
         <form onSubmit={handleAdd}>
-          <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'1fr 1fr 1fr 1fr',gap:'12px',marginBottom:'16px' }}>
+          <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr',gap:'12px',marginBottom:'16px' }}>
             <div><label style={fl}>Teacher ID *</label><input style={fi} placeholder="e.g. T037" value={form.teacher_id} onChange={e=>setForm(f=>({...f,teacher_id:e.target.value}))} required/></div>
             <div><label style={fl}>Full Name *</label><input style={fi} placeholder="Ms. Jane Doe" value={form.full_name} onChange={e=>setForm(f=>({...f,full_name:e.target.value}))} required/></div>
-            <div><label style={fl}>Department *</label>
-              <select style={fi} required value={form.department_id} onChange={e=>setForm(f=>({...f,department_id:e.target.value}))}>
-                <option value="">Select</option>{depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </div>
             <div><label style={fl}>Specialization</label><input style={fi} placeholder="e.g. AI / ML" value={form.specialization} onChange={e=>setForm(f=>({...f,specialization:e.target.value}))}/></div>
           </div>
 
@@ -393,7 +390,7 @@ function TeacherTab() {
       <div style={{ borderRadius:'10px',overflow:'hidden',border:'1px solid #e0e8ed' }}>
         <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
           <thead><tr style={{ background:'#2d4a5a',color:'white' }}>
-            {['ID','Full Name','Department','Courses Teaching','Action'].map(h=>(
+            {['ID','Full Name','Specialization','Courses Teaching','Action'].map(h=>(
               <th key={h} style={{ padding:'10px 14px',textAlign:'left',fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px' }}>{h}</th>
             ))}
           </tr></thead>
@@ -404,8 +401,8 @@ function TeacherTab() {
                   <>
                     <td style={{ padding:'8px 14px' }}><strong style={{ fontFamily:'monospace',color:'#2d4a5a' }}>{t.teacher_id}</strong></td>
                     <td style={{ padding:'8px 14px' }}><input style={{...fi,padding:'6px 9px'}} value={editForm.full_name} onChange={e=>setEditForm(f=>({...f,full_name:e.target.value}))}/></td>
-                    <td style={{ padding:'8px 14px' }}><select style={{...fi,padding:'6px 9px'}} value={editForm.department_id} onChange={e=>setEditForm(f=>({...f,department_id:e.target.value}))}>{depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></td>
                     <td style={{ padding:'8px 14px' }}><input style={{...fi,padding:'6px 9px'}} placeholder="Specialization" value={editForm.specialization||''} onChange={e=>setEditForm(f=>({...f,specialization:e.target.value}))}/></td>
+                    <td style={{ padding:'8px 14px',color:'#5a7080',fontSize:'11px' }}>CS &amp; SE Department</td>
                     <td style={{ padding:'8px 14px' }}>
                       <div style={{ display:'flex',gap:'5px' }}>
                         <button onClick={()=>handleEdit(t.id)} style={{ background:'#16a34a',color:'white',border:'none',padding:'5px 12px',borderRadius:'6px',fontSize:'11px',fontWeight:'600',cursor:'pointer',display:'flex',alignItems:'center',gap:'4px' }}><Check size={11}/> Save</button>
@@ -417,7 +414,7 @@ function TeacherTab() {
                   <>
                     <td style={{ padding:'10px 14px' }}><strong style={{ fontFamily:'monospace',color:'#2d4a5a' }}>{t.teacher_id}</strong></td>
                     <td style={{ padding:'10px 14px',fontWeight:'600',color:'#1a2e3a' }}>{t.full_name}</td>
-                    <td style={{ padding:'10px 14px' }}><span style={{ background:'#e8f4fd',color:'#1a5a7a',border:'1px solid #b8d9f5',borderRadius:'10px',padding:'2px 9px',fontSize:'10px',fontWeight:'600' }}>{t.department_name}</span></td>
+                    <td style={{ padding:'10px 14px',color:'#5a7080',fontSize:'12px' }}>{t.specialization||<span style={{ color:'#aabbc8' }}>—</span>}</td>
                     <td style={{ padding:'10px 14px' }}>
                       <div style={{ display:'flex',flexWrap:'wrap',gap:'4px' }}>
                         {t.subjects?.slice(0,3).map((s,i)=><span key={i} style={{ background:'#f0f4f7',color:'#2d4a5a',borderRadius:'8px',padding:'2px 8px',fontSize:'10px',fontWeight:'600' }}>{s}</span>)}
@@ -792,6 +789,7 @@ function EnrollmentTab() {
 }
 
 function EnrollManual({ batches, depts, onSuccess, onError }) {
+  const { isMobile } = useResponsive();
   const [form,setForm]=useState({student_id:'',first_name:'',last_name:'',email:'',batch_id:'',department_id:''});
   const [loading,setLoading]=useState(false);
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
@@ -814,6 +812,7 @@ function EnrollManual({ batches, depts, onSuccess, onError }) {
 }
 
 function EnrollBulk({ batches, onSuccess, onError }) {
+  const { isMobile } = useResponsive();
   const [batchId,setBatchId]=useState('');
   const [file,setFile]=useState(null);
   const [loading,setLoading]=useState(false);
