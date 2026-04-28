@@ -1,6 +1,6 @@
 // frontend/src/pages/assistant/OfficeMgmtPage.js
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, Users, BookOpen, Building2, Clock, Plus, Pencil, Check, X, Trash2 } from 'lucide-react';
+import { GraduationCap, Users, BookOpen, Building2, Clock, Plus, Pencil, Check, X, Trash2, Search } from 'lucide-react';
 import api from '../../utils/api';
 import { useResponsive } from '../../hooks/useResponsive';
 
@@ -9,6 +9,20 @@ const fi = { width:'100%',padding:'9px 11px',border:'1px solid #dde3e8',borderRa
 const btn = { background:'#2d4a5a',color:'white',border:'none',padding:'9px 20px',borderRadius:'7px',fontSize:'12px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'6px' };
 const card = { background:'#f8fafc',border:'1px solid #e0e8ed',borderRadius:'10px',padding:'18px 20px',marginBottom:'20px' };
 const msg  = ok => ({ padding:'9px 14px',borderRadius:'7px',fontSize:'12px',fontWeight:'600',marginBottom:'14px',background:ok?'#dcfce7':'#fef2f2',color:ok?'#16a34a':'#dc2626',border:`1px solid ${ok?'#86efac':'#fecaca'}`,display:'flex',alignItems:'center',gap:'7px' });
+
+// Reusable search bar
+function SearchBar({ value, onChange, placeholder='Search...' }) {
+  return (
+    <div style={{ position:'relative',marginBottom:'14px' }}>
+      <Search size={13} style={{ position:'absolute',left:'10px',top:'50%',transform:'translateY(-50%)',color:'#aabbc8',pointerEvents:'none' }}/>
+      <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+        style={{ ...fi,paddingLeft:'30px',paddingTop:'7px',paddingBottom:'7px' }}/>
+      {value&&<button onClick={()=>onChange('')} style={{ position:'absolute',right:'8px',top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#aabbc8',display:'flex',padding:0 }}>
+        <X size={13}/>
+      </button>}
+    </div>
+  );
+}
 
 // Reusable checklist for multi-select
 function Checklist({ items, selected, onToggle, labelKey='name', emptyText='No items found', maxHeight=160 }) {
@@ -101,11 +115,11 @@ function BatchTab() {
   const [selRoom,    setSelRoom]    = useState('');
   const [form, setForm] = useState({ batch_name:'',major:'',major_code:'',year:new Date().getFullYear(),student_count:45,department_id:'' });
   const [m, setM] = useState(null);
-  // Edit state
-  const [editBatch,   setEditBatch]   = useState(null); // batch being edited
+  const [search, setSearch] = useState('');
+  const [editBatch,   setEditBatch]   = useState(null);
   const [editForm,    setEditForm]    = useState({});
-  const [editCourses, setEditCourses] = useState([]); // current assigned courses for edit
-  const [editSel,     setEditSel]     = useState([]); // selected courses in edit panel
+  const [editCourses, setEditCourses] = useState([]);
+  const [editSel,     setEditSel]     = useState([]);
   const MAJORS=[{l:'Computer Science',c:'CS'},{l:'Software Engineering',c:'SE'},{l:'Data Science',c:'DS'}];
 
   const loadData = () => {
@@ -141,22 +155,18 @@ function BatchTab() {
     setTimeout(()=>setM(null),3500);
   };
 
-  // Open edit panel for a batch
   const openEdit = async b => {
     setEditBatch(b);
     setEditForm({ batch_name:b.batch_name, student_count:b.student_count, room_id:b.default_room_id||'' });
-    // Load assigned courses
     try{
       const r=await api.get('/assignments/batch-subjects',{params:{batch_id:b.id}});
-      const ids=r.data.map(x=>x.subject_id);
       setEditCourses(r.data);
-      setEditSel(ids);
+      setEditSel(r.data.map(x=>x.subject_id));
     }catch(_){ setEditCourses([]); setEditSel([]); }
   };
 
   const handleEditSave = async () => {
     try{
-      // Update batch info
       await api.put(`/office/batches/${editBatch.id}`,{
         batch_name: editForm.batch_name||editBatch.batch_name,
         major: editBatch.major, major_code: editBatch.major_code,
@@ -165,19 +175,11 @@ function BatchTab() {
         department_id: editBatch.department_id,
         default_room_id: editForm.room_id||null
       });
-
-      // Sync courses — remove deselected, add newly selected
       const current = editCourses.map(c=>c.subject_id);
       const toAdd    = editSel.filter(id=>!current.includes(id));
       const toRemove = editCourses.filter(c=>!editSel.includes(c.subject_id));
-
-      for(const sid of toAdd){
-        try{ await api.post('/assignments/batch-subjects',{batch_id:editBatch.id,subject_id:sid,semester:1}); }catch(_){}
-      }
-      for(const c of toRemove){
-        try{ await api.delete(`/assignments/batch-subjects/${c.id}`); }catch(_){}
-      }
-
+      for(const sid of toAdd){ try{ await api.post('/assignments/batch-subjects',{batch_id:editBatch.id,subject_id:sid,semester:1}); }catch(_){} }
+      for(const c of toRemove){ try{ await api.delete(`/assignments/batch-subjects/${c.id}`); }catch(_){} }
       loadData();
       setM({ok:true,text:'Batch updated successfully.'});
       setEditBatch(null);
@@ -185,73 +187,52 @@ function BatchTab() {
     setTimeout(()=>setM(null),3500);
   };
 
+  const filtered = batches.filter(b=>
+    b.batch_name?.toLowerCase().includes(search.toLowerCase()) ||
+    b.major?.toLowerCase().includes(search.toLowerCase()) ||
+    String(b.year).includes(search)
+  );
+
   return (
     <div>
       {m&&<div style={msg(m.ok)}>{m.ok?<Check size={13}/>:<X size={13}/>} {m.text}</div>}
 
-      {/* ── Edit Panel (shown when a batch is selected for editing) ── */}
       {editBatch&&(
         <div style={{ ...card,border:'2px solid #2d4a5a',marginBottom:'20px' }}>
           <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px' }}>
             <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',display:'flex',alignItems:'center',gap:'8px' }}>
               <Pencil size={15}/> Editing: {editBatch.batch_name}
             </div>
-            <button onClick={()=>setEditBatch(null)}
-              style={{ background:'#f0f4f7',border:'1px solid #dde3e8',color:'#5a7080',borderRadius:'6px',padding:'5px 12px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'4px' }}>
+            <button onClick={()=>setEditBatch(null)} style={{ background:'#f0f4f7',border:'1px solid #dde3e8',color:'#5a7080',borderRadius:'6px',padding:'5px 12px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'4px' }}>
               <X size={12}/> Cancel
             </button>
           </div>
-
-          {/* Editable fields */}
           <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'12px',marginBottom:'16px' }}>
-            <div>
-              <label style={fl}>Batch Name</label>
-              <input style={fi} value={editForm.batch_name} onChange={e=>setEditForm(f=>({...f,batch_name:e.target.value}))}/>
-            </div>
-            <div>
-              <label style={fl}>No. of Students</label>
-              <input style={fi} type="number" value={editForm.student_count} onChange={e=>setEditForm(f=>({...f,student_count:parseInt(e.target.value)}))}/>
-            </div>
+            <div><label style={fl}>Batch Name</label><input style={fi} value={editForm.batch_name} onChange={e=>setEditForm(f=>({...f,batch_name:e.target.value}))}/></div>
+            <div><label style={fl}>No. of Students</label><input style={fi} type="number" value={editForm.student_count} onChange={e=>setEditForm(f=>({...f,student_count:parseInt(e.target.value)}))}/></div>
           </div>
-
-          {/* Read-only info */}
           <div style={{ display:'flex',gap:'12px',marginBottom:'16px',flexWrap:'wrap' }}>
             <span style={{ background:'#e8f4fd',color:'#1a5a7a',border:'1px solid #b8d9f5',borderRadius:'8px',padding:'4px 12px',fontSize:'11px',fontWeight:'600' }}>Major: {editBatch.major}</span>
             <span style={{ background:'#f0f4f7',color:'#2d4a5a',border:'1px solid #c8d8e0',borderRadius:'8px',padding:'4px 12px',fontSize:'11px',fontWeight:'600' }}>Year: {editBatch.year}</span>
           </div>
-
-          {/* Room assignment in edit */}
           <div style={{ marginBottom:'16px' }}>
             <label style={fl}>Default Classroom</label>
             <select value={editForm.room_id||''} onChange={e=>setEditForm(f=>({...f,room_id:e.target.value}))} style={fi}>
               <option value="">-- No default room --</option>
-              {rooms.map(r=>(
-                <option key={r.id} value={r.id}>{r.room_id} — Capacity {r.capacity} · {r.room_type==='lab'?'Lab':'Classroom'}</option>
-              ))}
+              {rooms.map(r=><option key={r.id} value={r.id}>{r.room_id} — Capacity {r.capacity} · {r.room_type==='lab'?'Lab':'Classroom'}</option>)}
             </select>
           </div>
-
-          {/* Course assignment */}
           <div style={{ border:'2px solid #dde3e8',borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
             <SectionLabel count={editSel.length}>Assigned Courses</SectionLabel>
-            <Checklist items={subjects} selected={editSel}
-              onToggle={id=>setEditSel(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])}
-              labelKey="name" emptyText="No courses available" maxHeight={200}/>
+            <Checklist items={subjects} selected={editSel} onToggle={id=>setEditSel(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])} labelKey="name" emptyText="No courses available" maxHeight={200}/>
           </div>
-
           <div style={{ display:'flex',gap:'10px' }}>
-            <button onClick={handleEditSave} style={{ ...btn,background:'#16a34a' }}>
-              <Check size={13}/> Save Changes
-            </button>
-            <button onClick={()=>setEditBatch(null)}
-              style={{ padding:'9px 18px',border:'1px solid #dde3e8',borderRadius:'7px',background:'white',color:'#5a7080',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit' }}>
-              Cancel
-            </button>
+            <button onClick={handleEditSave} style={{ ...btn,background:'#16a34a' }}><Check size={13}/> Save Changes</button>
+            <button onClick={()=>setEditBatch(null)} style={{ padding:'9px 18px',border:'1px solid #dde3e8',borderRadius:'7px',background:'white',color:'#5a7080',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit' }}>Cancel</button>
           </div>
         </div>
       )}
 
-      {/* ── Add New Batch ── */}
       {!editBatch&&(
         <div style={card}>
           <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Batch</div>
@@ -264,8 +245,7 @@ function BatchTab() {
                 </select>
               </div>
               <div><label style={fl}>Year *</label><input style={fi} type="number" min="2022" max="2030" value={form.year} onChange={e=>setForm(f=>({...f,year:parseInt(e.target.value)}))} required/></div>
-              <div>
-                <label style={fl}>Default Room</label>
+              <div><label style={fl}>Default Room</label>
                 <select value={selRoom} onChange={e=>setSelRoom(e.target.value)} style={fi}>
                   <option value="">-- None --</option>
                   {rooms.map(r=><option key={r.id} value={r.id}>{r.room_id} (Cap: {r.capacity})</option>)}
@@ -275,19 +255,20 @@ function BatchTab() {
             </div>
             <div style={{ border:'2px solid #dde3e8',borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
               <SectionLabel count={selCourses.length}>Assign Courses to this Batch *</SectionLabel>
-              {!form.major_code?(
-                <div style={{ padding:'16px',textAlign:'center',color:'#aabbc8',fontSize:'12px',border:'1px dashed #e0e8ed',borderRadius:'7px' }}>Select a major first to assign courses</div>
-              ):(
-                <Checklist items={subjects} selected={selCourses} onToggle={toggle} labelKey="name" emptyText="No courses found"/>
-              )}
+              {!form.major_code
+                ?<div style={{ padding:'16px',textAlign:'center',color:'#aabbc8',fontSize:'12px',border:'1px dashed #e0e8ed',borderRadius:'7px' }}>Select a major first to assign courses</div>
+                :<Checklist items={subjects} selected={selCourses} onToggle={toggle} labelKey="name" emptyText="No courses found"/>
+              }
             </div>
             <button type="submit" style={btn}><Plus size={13}/> Add Batch</button>
           </form>
         </div>
       )}
 
-      {/* ── Existing Batches ── */}
-      <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px' }}><GraduationCap size={14}/> Existing Batches <span style={{ fontSize:'11px',color:'#7a9aaa',fontWeight:'400' }}>— click Edit to manage courses</span></div>
+      <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'10px' }}>
+        <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',display:'flex',alignItems:'center',gap:'6px' }}><GraduationCap size={14}/> Existing Batches <span style={{ fontSize:'11px',color:'#7a9aaa',fontWeight:'400' }}>— click Edit to manage courses</span></div>
+      </div>
+      <SearchBar value={search} onChange={setSearch} placeholder="Search by batch name, major or year..."/>
       <div style={{ borderRadius:'10px',overflow:'hidden',border:'1px solid #e0e8ed' }}>
         <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
           <thead><tr style={{ background:'#2d4a5a',color:'white' }}>
@@ -296,21 +277,20 @@ function BatchTab() {
             ))}
           </tr></thead>
           <tbody>
-            {batches.map(b=>(
+            {filtered.map(b=>(
               <tr key={b.id} style={{ borderBottom:'0.5px solid #e8edf0',background:editBatch?.id===b.id?'#f0f6fa':'white' }}>
                 <td style={{ padding:'10px 14px',fontWeight:'700',color:'#1a2e3a' }}>{b.batch_name}</td>
                 <td style={{ padding:'10px 14px' }}><span style={{ background:'#e8f4fd',color:'#1a5a7a',border:'1px solid #b8d9f5',borderRadius:'10px',padding:'2px 9px',fontSize:'10px',fontWeight:'600' }}>{b.major}</span></td>
                 <td style={{ padding:'10px 14px',color:'#5a7080' }}>{b.year}</td>
                 <td style={{ padding:'10px 14px',color:'#5a7080' }}>{b.student_count}</td>
                 <td style={{ padding:'10px 14px' }}>
-                  <button onClick={()=>openEdit(b)}
-                    style={{ background:editBatch?.id===b.id?'#2d4a5a':'transparent',color:editBatch?.id===b.id?'white':'#2d4a5a',border:'1px solid #2d4a5a',padding:'5px 14px',borderRadius:'6px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'5px' }}>
+                  <button onClick={()=>openEdit(b)} style={{ background:editBatch?.id===b.id?'#2d4a5a':'transparent',color:editBatch?.id===b.id?'white':'#2d4a5a',border:'1px solid #2d4a5a',padding:'5px 14px',borderRadius:'6px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'5px' }}>
                     <Pencil size={11}/> {editBatch?.id===b.id?'Editing':'Edit'}
                   </button>
                 </td>
               </tr>
             ))}
-            {batches.length===0&&<tr><td colSpan="5" style={{ padding:'28px',textAlign:'center',color:'#aabbc8' }}>No batches found.</td></tr>}
+            {filtered.length===0&&<tr><td colSpan="5" style={{ padding:'28px',textAlign:'center',color:'#aabbc8' }}>{search?'No batches match your search.':'No batches found.'}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -321,20 +301,25 @@ function BatchTab() {
 // ── TEACHER TAB ───────────────────────────────────────────────────────────
 function TeacherTab() {
   const { isMobile } = useResponsive();
-  const [teachers,   setTeachers]  = useState([]);
-  const [depts,      setDepts]     = useState([]);
-  const [subjects,   setSubjects]  = useState([]);
-  const [selCourses, setSelCourses]= useState([]);
+  const [teachers,      setTeachers]     = useState([]);
+  const [depts,         setDepts]        = useState([]);
+  const [subjects,      setSubjects]     = useState([]);
+  const [selCourses,    setSelCourses]   = useState([]);
   const [form, setForm] = useState({ teacher_id:'',full_name:'',department_id:'',specialization:'' });
-  const [editId, setEditId]   = useState(null);
-  const [editForm, setEditForm]= useState({});
-  const [m, setM] = useState(null);
+  const [m, setM]       = useState(null);
+  const [search,        setSearch]       = useState('');
+  // Edit panel state (like Batch/Course tabs)
+  const [editTeacher,   setEditTeacher]  = useState(null);
+  const [editForm,      setEditForm]     = useState({});
+  const [editCourses,   setEditCourses]  = useState([]); // current assigned rows
+  const [editSel,       setEditSel]      = useState([]); // selected subject ids
 
-  useEffect(()=>{
+  const loadData = () => {
     api.get('/office/teachers').then(r=>setTeachers(r.data));
     api.get('/office/departments').then(r=>setDepts(r.data));
     api.get('/office/subjects').then(r=>setSubjects(r.data));
-  },[]);
+  };
+  useEffect(()=>{ loadData(); },[]);
 
   const toggle = id => setSelCourses(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
 
@@ -358,81 +343,159 @@ function TeacherTab() {
     setTimeout(()=>setM(null),3500);
   };
 
-  const handleEdit = async id => {
-    try{ await api.put(`/office/teachers/${id}`,editForm); api.get('/office/teachers').then(r=>setTeachers(r.data)); setEditId(null); }
-    catch(e){ alert('Error updating'); }
+  const openEdit = async t => {
+    setEditTeacher(t);
+    setEditForm({ full_name:t.full_name });
+    try{
+      const r = await api.get('/assignments/teacher-subjects',{params:{teacher_id:t.id}});
+      setEditCourses(r.data);
+      setEditSel(r.data.map(x=>x.subject_id));
+    }catch(_){ setEditCourses([]); setEditSel([]); }
   };
+
+  const handleEditSave = async () => {
+    if(editSel.length===0){ setM({ok:false,text:'Please assign at least one course.'}); setTimeout(()=>setM(null),3500); return; }
+    try{
+      await api.put(`/office/teachers/${editTeacher.id}`,{ ...editForm, department_id:editTeacher.department_id });
+      // Sync courses
+      const current = editCourses.map(c=>c.subject_id);
+      const toAdd    = editSel.filter(id=>!current.includes(id));
+      const toRemove = editCourses.filter(c=>!editSel.includes(c.subject_id));
+      for(const sid of toAdd){ try{ await api.post('/assignments/teacher-subjects',{teacher_id:editTeacher.id,subject_id:sid}); }catch(_){} }
+      for(const c of toRemove){ try{ await api.delete(`/assignments/teacher-subjects/${c.id}`); }catch(_){} }
+      loadData();
+      setM({ok:true,text:'Teacher updated successfully.'});
+      setEditTeacher(null);
+    }catch(err){ setM({ok:false,text:err.response?.data?.message||'Error saving.'}); }
+    setTimeout(()=>setM(null),3500);
+  };
+
+  const filtered = teachers.filter(t=>
+    t.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+    t.teacher_id?.toLowerCase().includes(search.toLowerCase()) ||
+    t.subjects?.some(s=>s.toLowerCase().includes(search.toLowerCase()))
+  );
 
   return (
     <div>
-      <div style={card}>
-        <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Teacher</div>
-        {m&&<div style={msg(m.ok)}>{m.ok?<Check size={13}/>:<X size={13}/>} {m.text}</div>}
-        <form onSubmit={handleAdd}>
-          <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr',gap:'12px',marginBottom:'16px' }}>
-            <div><label style={fl}>Teacher ID *</label><input style={fi} placeholder="e.g. T037" value={form.teacher_id} onChange={e=>setForm(f=>({...f,teacher_id:e.target.value}))} required/></div>
-            <div><label style={fl}>Full Name *</label><input style={fi} placeholder="Ms. Jane Doe" value={form.full_name} onChange={e=>setForm(f=>({...f,full_name:e.target.value}))} required/></div>
-            <div><label style={fl}>Specialization</label><input style={fi} placeholder="e.g. AI / ML" value={form.specialization} onChange={e=>setForm(f=>({...f,specialization:e.target.value}))}/></div>
-          </div>
+      {m&&<div style={msg(m.ok)}>{m.ok?<Check size={13}/>:<X size={13}/>} {m.text}</div>}
 
-          {/* Course assignment — required */}
+      {/* ── Edit Panel ── */}
+      {editTeacher&&(
+        <div style={{ ...card,border:'2px solid #2d4a5a',marginBottom:'20px' }}>
+          <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px' }}>
+            <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',display:'flex',alignItems:'center',gap:'8px' }}>
+              <Pencil size={15}/> Editing: {editTeacher.teacher_id} — {editTeacher.full_name}
+            </div>
+            <button onClick={()=>setEditTeacher(null)} style={{ background:'#f0f4f7',border:'1px solid #dde3e8',color:'#5a7080',borderRadius:'6px',padding:'5px 12px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'4px' }}>
+              <X size={12}/> Cancel
+            </button>
+          </div>
+          <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'12px',marginBottom:'16px' }}>
+            <div>
+              <label style={fl}>Teacher ID</label>
+              <div style={{ ...fi,background:'#f8fafc',color:'#7a9aaa',cursor:'not-allowed' }}>{editTeacher.teacher_id}</div>
+            </div>
+            <div>
+              <label style={fl}>Full Name</label>
+              <input style={fi} value={editForm.full_name} onChange={e=>setEditForm(f=>({...f,full_name:e.target.value}))}/>
+            </div>
+          </div>
+          <div style={{ marginBottom:'16px',padding:'8px 12px',background:'#e8f4fd',border:'1px solid #b8d9f5',borderRadius:'7px',fontSize:'12px',color:'#1a5a7a',display:'flex',alignItems:'center',gap:'6px' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1a5a7a" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Department: <strong>CS &amp; SE Department</strong>
+          </div>
           <div style={{ border:'2px solid #dde3e8',borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
-            <SectionLabel count={selCourses.length}>Assign Courses to this Teacher *</SectionLabel>
-            <Checklist items={subjects} selected={selCourses} onToggle={toggle} labelKey="name" emptyText="No courses available"/>
+            <SectionLabel count={editSel.length}>Assigned Courses</SectionLabel>
+
+            {/* Currently assigned — shown as removable tags */}
+            {editSel.length>0&&(
+              <div style={{ marginBottom:'12px' }}>
+                <div style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'7px' }}>Currently Assigned — click × to remove</div>
+                <div style={{ display:'flex',flexWrap:'wrap',gap:'6px' }}>
+                  {editSel.map(sid=>{
+                    const subj = subjects.find(s=>s.id===sid);
+                    if(!subj) return null;
+                    return (
+                      <div key={sid} style={{ display:'flex',alignItems:'center',gap:'5px',background:'#e8f4fd',border:'1px solid #b8d9f5',borderRadius:'8px',padding:'4px 8px 4px 10px',fontSize:'11px',fontWeight:'600',color:'#1a5a7a' }}>
+                        <span>{subj.name}</span>
+                        <button onClick={()=>setEditSel(p=>p.filter(x=>x!==sid))}
+                          style={{ background:'#bdd9f5',border:'none',cursor:'pointer',color:'#1a5a7a',borderRadius:'50%',width:'16px',height:'16px',display:'flex',alignItems:'center',justifyContent:'center',padding:0,flexShrink:0,lineHeight:1 }}>
+                          <X size={9}/>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Add more courses */}
+            <div style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'7px' }}>Add More Courses</div>
+            <Checklist items={subjects.filter(s=>!editSel.includes(s.id))} selected={[]}
+              onToggle={id=>setEditSel(p=>[...p,id])}
+              labelKey="name" emptyText="All courses already assigned" maxHeight={160}/>
           </div>
+          <div style={{ display:'flex',gap:'10px' }}>
+            <button onClick={handleEditSave} style={{ ...btn,background:'#16a34a' }}><Check size={13}/> Save Changes</button>
+            <button onClick={()=>setEditTeacher(null)} style={{ padding:'9px 18px',border:'1px solid #dde3e8',borderRadius:'7px',background:'white',color:'#5a7080',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit' }}>Cancel</button>
+          </div>
+        </div>
+      )}
 
-          <button type="submit" style={btn}><Plus size={13}/> Add Teacher</button>
-        </form>
-      </div>
+      {/* ── Add New Teacher ── */}
+      {!editTeacher&&(
+        <div style={card}>
+          <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Teacher</div>
+          <form onSubmit={handleAdd}>
+            <div style={{ marginBottom:'10px',padding:'8px 12px',background:'#e8f4fd',border:'1px solid #b8d9f5',borderRadius:'7px',fontSize:'12px',color:'#1a5a7a',display:'flex',alignItems:'center',gap:'6px' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1a5a7a" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              Department: <strong>CS &amp; SE Department</strong> — all teachers are hired under the same department
+            </div>
+            <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'12px',marginBottom:'16px' }}>
+              <div><label style={fl}>Teacher ID *</label><input style={fi} placeholder="e.g. T037" value={form.teacher_id} onChange={e=>setForm(f=>({...f,teacher_id:e.target.value}))} required/></div>
+              <div><label style={fl}>Full Name *</label><input style={fi} placeholder="Ms. Jane Doe" value={form.full_name} onChange={e=>setForm(f=>({...f,full_name:e.target.value}))} required/></div>
+            </div>
+            <div style={{ border:'2px solid #dde3e8',borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
+              <SectionLabel count={selCourses.length}>Assign Courses to this Teacher *</SectionLabel>
+              <Checklist items={subjects} selected={selCourses} onToggle={toggle} labelKey="name" emptyText="No courses available"/>
+            </div>
+            <button type="submit" style={btn}><Plus size={13}/> Add Teacher</button>
+          </form>
+        </div>
+      )}
 
-      {/* Teacher directory */}
-      <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px' }}><Users size={14}/> Teacher Directory</div>
+      {/* ── Teacher Directory ── */}
+      <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px' }}><Users size={14}/> Teacher Directory</div>
+      <SearchBar value={search} onChange={setSearch} placeholder="Search by name, ID or course..."/>
       <div style={{ borderRadius:'10px',overflow:'hidden',border:'1px solid #e0e8ed' }}>
         <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
           <thead><tr style={{ background:'#2d4a5a',color:'white' }}>
-            {['ID','Full Name','Specialization','Courses Teaching','Action'].map(h=>(
+            {['ID','Full Name','Courses Teaching','Action'].map(h=>(
               <th key={h} style={{ padding:'10px 14px',textAlign:'left',fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px' }}>{h}</th>
             ))}
           </tr></thead>
           <tbody>
-            {teachers.map(t=>(
-              <tr key={t.id} style={{ borderBottom:'0.5px solid #e8edf0' }}>
-                {editId===t.id?(
-                  <>
-                    <td style={{ padding:'8px 14px' }}><strong style={{ fontFamily:'monospace',color:'#2d4a5a' }}>{t.teacher_id}</strong></td>
-                    <td style={{ padding:'8px 14px' }}><input style={{...fi,padding:'6px 9px'}} value={editForm.full_name} onChange={e=>setEditForm(f=>({...f,full_name:e.target.value}))}/></td>
-                    <td style={{ padding:'8px 14px' }}><input style={{...fi,padding:'6px 9px'}} placeholder="Specialization" value={editForm.specialization||''} onChange={e=>setEditForm(f=>({...f,specialization:e.target.value}))}/></td>
-                    <td style={{ padding:'8px 14px',color:'#5a7080',fontSize:'11px' }}>CS &amp; SE Department</td>
-                    <td style={{ padding:'8px 14px' }}>
-                      <div style={{ display:'flex',gap:'5px' }}>
-                        <button onClick={()=>handleEdit(t.id)} style={{ background:'#16a34a',color:'white',border:'none',padding:'5px 12px',borderRadius:'6px',fontSize:'11px',fontWeight:'600',cursor:'pointer',display:'flex',alignItems:'center',gap:'4px' }}><Check size={11}/> Save</button>
-                        <button onClick={()=>setEditId(null)} style={{ background:'#f0f4f7',color:'#5a7080',border:'1px solid #dde3e8',padding:'5px 9px',borderRadius:'6px',fontSize:'11px',cursor:'pointer' }}><X size={11}/></button>
-                      </div>
-                    </td>
-                  </>
-                ):(
-                  <>
-                    <td style={{ padding:'10px 14px' }}><strong style={{ fontFamily:'monospace',color:'#2d4a5a' }}>{t.teacher_id}</strong></td>
-                    <td style={{ padding:'10px 14px',fontWeight:'600',color:'#1a2e3a' }}>{t.full_name}</td>
-                    <td style={{ padding:'10px 14px',color:'#5a7080',fontSize:'12px' }}>{t.specialization||<span style={{ color:'#aabbc8' }}>—</span>}</td>
-                    <td style={{ padding:'10px 14px' }}>
-                      <div style={{ display:'flex',flexWrap:'wrap',gap:'4px' }}>
-                        {t.subjects?.slice(0,3).map((s,i)=><span key={i} style={{ background:'#f0f4f7',color:'#2d4a5a',borderRadius:'8px',padding:'2px 8px',fontSize:'10px',fontWeight:'600' }}>{s}</span>)}
-                        {t.subjects?.length>3&&<span style={{ background:'#e8f4fd',color:'#1a5a7a',borderRadius:'8px',padding:'2px 8px',fontSize:'10px',fontWeight:'600' }}>+{t.subjects.length-3}</span>}
-                        {(!t.subjects||!t.subjects.length)&&<span style={{ fontSize:'11px',color:'#aabbc8' }}>None assigned</span>}
-                      </div>
-                    </td>
-                    <td style={{ padding:'10px 14px' }}>
-                      <button onClick={()=>{ setEditId(t.id); setEditForm({full_name:t.full_name,department_id:t.department_id||'',specialization:t.specialization||''}); }}
-                        style={{ background:'transparent',border:'1px solid #2d4a5a',color:'#2d4a5a',padding:'5px 12px',borderRadius:'6px',fontSize:'11px',fontWeight:'600',cursor:'pointer',display:'flex',alignItems:'center',gap:'4px' }}>
-                        <Pencil size={11}/> Edit
-                      </button>
-                    </td>
-                  </>
-                )}
+            {filtered.map(t=>(
+              <tr key={t.id} style={{ borderBottom:'0.5px solid #e8edf0',background:editTeacher?.id===t.id?'#f0f6fa':'white' }}>
+                <td style={{ padding:'10px 14px' }}><strong style={{ fontFamily:'monospace',color:'#2d4a5a' }}>{t.teacher_id}</strong></td>
+                <td style={{ padding:'10px 14px',fontWeight:'600',color:'#1a2e3a' }}>{t.full_name}</td>
+                <td style={{ padding:'10px 14px' }}>
+                  <div style={{ display:'flex',flexWrap:'wrap',gap:'4px' }}>
+                    {t.subjects?.slice(0,3).map((s,i)=><span key={i} style={{ background:'#f0f4f7',color:'#2d4a5a',borderRadius:'8px',padding:'2px 8px',fontSize:'10px',fontWeight:'600' }}>{s}</span>)}
+                    {t.subjects?.length>3&&<span style={{ background:'#e8f4fd',color:'#1a5a7a',borderRadius:'8px',padding:'2px 8px',fontSize:'10px',fontWeight:'600' }}>+{t.subjects.length-3}</span>}
+                    {(!t.subjects||!t.subjects.length)&&<span style={{ fontSize:'11px',color:'#aabbc8' }}>None assigned</span>}
+                  </div>
+                </td>
+                <td style={{ padding:'10px 14px' }}>
+                  <button onClick={()=>openEdit(t)}
+                    style={{ background:editTeacher?.id===t.id?'#2d4a5a':'transparent',color:editTeacher?.id===t.id?'white':'#2d4a5a',border:'1px solid #2d4a5a',padding:'5px 14px',borderRadius:'6px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'5px' }}>
+                    <Pencil size={11}/> {editTeacher?.id===t.id?'Editing':'Edit'}
+                  </button>
+                </td>
               </tr>
             ))}
-            {teachers.length===0&&<tr><td colSpan="5" style={{ padding:'28px',textAlign:'center',color:'#aabbc8' }}>No teachers found.</td></tr>}
+            {filtered.length===0&&<tr><td colSpan="4" style={{ padding:'28px',textAlign:'center',color:'#aabbc8' }}>{search?'No teachers match your search.':'No teachers found.'}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -444,44 +507,44 @@ function TeacherTab() {
 function CourseTab() {
   const { isMobile } = useResponsive();
   const [subjects,    setSubjects]  = useState([]);
-  const [depts,       setDepts]     = useState([]);
   const [teachers,    setTeachers]  = useState([]);
   const [selTeachers, setSelTeach]  = useState([]);
-  const [form, setForm] = useState({ code:'',name:'',short_name:'',credit_hours:3,department_id:'',has_lab:false });
+  const [form, setForm] = useState({ code:'',name:'',short_name:'',credit_hours:3,has_lab:false });
   const [m, setM]       = useState(null);
-  // Edit state
+  const [search, setSearch] = useState('');
   const [editCourse,    setEditCourse]   = useState(null);
   const [editForm,      setEditForm]     = useState({});
-  const [editTeachers,  setEditTeachers] = useState([]); // currently assigned teacher-subject rows
-  const [editSelT,      setEditSelT]     = useState([]); // selected teacher ids in edit
+  const [editTeachers,  setEditTeachers] = useState([]);
+  const [editSelT,      setEditSelT]     = useState([]);
 
   const loadData = () => {
     api.get('/office/subjects').then(r=>setSubjects(r.data));
-    api.get('/office/departments').then(r=>setDepts(r.data));
     api.get('/office/teachers').then(r=>setTeachers(r.data));
   };
   useEffect(()=>{ loadData(); },[]);
 
   const toggle = id => setSelTeach(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+  const isFYP = f => /fyp|final.year.project/i.test(f.name+' '+f.code);
 
   const handleSubmit = async e => {
     e.preventDefault();
-    if(selTeachers.length===0){ setM({ok:false,text:'Please assign at least one teacher to this course.'}); return; }
+    if(selTeachers.length===0 && !isFYP(form)){ setM({ok:false,text:'Please assign at least one teacher to this course.'}); return; }
     try{
       const r=await api.post('/office/subjects',form);
       for(const tid of selTeachers){
         try{ await api.post('/assignments/teacher-subjects',{teacher_id:tid,subject_id:r.data.id}); }catch(_){}
       }
       loadData();
-      setM({ok:true,text:`Course added with ${selTeachers.length} teacher(s).`});
-      setForm({code:'',name:'',short_name:'',credit_hours:3,department_id:'',has_lab:false}); setSelTeach([]);
+      const teacherMsg = selTeachers.length>0 ? `with ${selTeachers.length} teacher(s)` : '(no supervisor assigned — each group has their own)';
+      setM({ok:true,text:`Course added ${teacherMsg}.`});
+      setForm({code:'',name:'',short_name:'',credit_hours:3,has_lab:false}); setSelTeach([]);
     }catch(err){ setM({ok:false,text:err.response?.data?.message||'Error'}); }
     setTimeout(()=>setM(null),3500);
   };
 
   const openEdit = async s => {
     setEditCourse(s);
-    setEditForm({ code:s.code, name:s.name, short_name:s.short_name, credit_hours:s.credit_hours, department_id:s.department_id||'', has_lab:s.has_lab });
+    setEditForm({ code:s.code, name:s.name, short_name:s.short_name, credit_hours:s.credit_hours, has_lab:s.has_lab });
     try{
       const r=await api.get('/assignments/teacher-subjects',{params:{subject_id:s.id}});
       setEditTeachers(r.data);
@@ -490,18 +553,15 @@ function CourseTab() {
   };
 
   const handleEditSave = async () => {
+    const isFYPCourse = /fyp|final.year.project/i.test((editForm.name||editCourse.name)+' '+(editForm.code||editCourse.code));
+    if(editSelT.length===0 && !isFYPCourse){ setM({ok:false,text:'Please assign at least one teacher to this course.'}); setTimeout(()=>setM(null),3500); return; }
     try{
       await api.put(`/office/subjects/${editCourse.id}`,{ ...editForm, code:editForm.code||editCourse.code });
-      // Sync teachers
       const current = editTeachers.map(t=>t.teacher_id);
       const toAdd   = editSelT.filter(id=>!current.includes(id));
       const toRemove= editTeachers.filter(t=>!editSelT.includes(t.teacher_id));
-      for(const tid of toAdd){
-        try{ await api.post('/assignments/teacher-subjects',{teacher_id:tid,subject_id:editCourse.id}); }catch(_){}
-      }
-      for(const t of toRemove){
-        try{ await api.delete(`/assignments/teacher-subjects/${t.id}`); }catch(_){}
-      }
+      for(const tid of toAdd){ try{ await api.post('/assignments/teacher-subjects',{teacher_id:tid,subject_id:editCourse.id}); }catch(_){} }
+      for(const t of toRemove){ try{ await api.delete(`/assignments/teacher-subjects/${t.id}`); }catch(_){} }
       loadData();
       setM({ok:true,text:'Course updated successfully.'});
       setEditCourse(null);
@@ -509,42 +569,55 @@ function CourseTab() {
     setTimeout(()=>setM(null),3500);
   };
 
+  const filtered = subjects.filter(s=>
+    s.name?.toLowerCase().includes(search.toLowerCase()) ||
+    s.code?.toLowerCase().includes(search.toLowerCase()) ||
+    s.short_name?.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <div>
       {m&&<div style={msg(m.ok)}>{m.ok?<Check size={13}/>:<X size={13}/>} {m.text}</div>}
 
-      {/* ── Edit Panel ── */}
       {editCourse&&(
         <div style={{ ...card,border:'2px solid #2d4a5a',marginBottom:'20px' }}>
           <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px' }}>
             <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',display:'flex',alignItems:'center',gap:'8px' }}>
               <Pencil size={15}/> Editing: {editCourse.name}
             </div>
-            <button onClick={()=>setEditCourse(null)}
-              style={{ background:'#f0f4f7',border:'1px solid #dde3e8',color:'#5a7080',borderRadius:'6px',padding:'5px 12px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'4px' }}>
+            <button onClick={()=>setEditCourse(null)} style={{ background:'#f0f4f7',border:'1px solid #dde3e8',color:'#5a7080',borderRadius:'6px',padding:'5px 12px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'4px' }}>
               <X size={12}/> Cancel
             </button>
           </div>
-
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 2fr 1fr 1fr 1fr',gap:'12px',marginBottom:'12px' }}>
+          <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 2fr 1fr 1fr',gap:'12px',marginBottom:'12px' }}>
             <div><label style={fl}>Code</label><input style={fi} value={editForm.code||editCourse.code} onChange={e=>setEditForm(f=>({...f,code:e.target.value}))}/></div>
             <div><label style={fl}>Course Name</label><input style={fi} value={editForm.name} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))}/></div>
             <div><label style={fl}>Short Name</label><input style={fi} value={editForm.short_name} onChange={e=>setEditForm(f=>({...f,short_name:e.target.value}))}/></div>
             <div><label style={fl}>Credit Hours</label><input style={fi} type="number" min="1" max="6" value={editForm.credit_hours} onChange={e=>setEditForm(f=>({...f,credit_hours:parseInt(e.target.value)}))}/></div>
-            <div><label style={fl}>Department</label><select style={fi} value={editForm.department_id} onChange={e=>setEditForm(f=>({...f,department_id:e.target.value}))}><option value="">Select</option>{depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
           </div>
           <label style={{ display:'flex',alignItems:'center',gap:'8px',fontSize:'12px',color:'#1a2e3a',fontWeight:'500',marginBottom:'16px',cursor:'pointer' }}>
             <input type="checkbox" checked={editForm.has_lab} onChange={e=>setEditForm(f=>({...f,has_lab:e.target.checked}))} style={{ width:'14px',height:'14px',accentColor:'#2d4a5a',cursor:'pointer' }}/>
             This course includes a Lab session (3-hour slot)
           </label>
-
-          <div style={{ border:'2px solid #dde3e8',borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
-            <SectionLabel count={editSelT.length}>Assigned Teachers</SectionLabel>
-            <Checklist items={teachers} selected={editSelT}
-              onToggle={id=>setEditSelT(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])}
-              labelKey="full_name" emptyText="No teachers found" maxHeight={180}/>
-          </div>
-
+          {(()=>{ const isFYPCourse=/fyp|final.year.project/i.test((editForm.name||editCourse.name)+' '+(editForm.code||editCourse.code)); return (
+            <div style={{ border:`2px solid ${isFYPCourse?'#fde68a':'#dde3e8'}`,borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
+              {isFYPCourse?(
+                <div style={{ marginBottom:'10px' }}>
+                  <div style={{ display:'flex',alignItems:'center',gap:'7px',marginBottom:'6px' }}>
+                    <div style={{ fontSize:'11px',fontWeight:'700',color:'#2d4a5a',textTransform:'uppercase',letterSpacing:'0.5px' }}>Assign Supervisor (Optional)</div>
+                    <span style={{ background:'#fef3c7',color:'#92400e',border:'1px solid #fde68a',fontSize:'9px',fontWeight:'700',borderRadius:'4px',padding:'1px 7px' }}>FYP</span>
+                  </div>
+                  <div style={{ background:'#fef3c7',border:'1px solid #fde68a',borderRadius:'7px',padding:'8px 12px',fontSize:'12px',color:'#92400e',display:'flex',alignItems:'flex-start',gap:'7px' }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5" style={{ flexShrink:0,marginTop:'1px' }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    Supervisor assignment is optional for FYP. Each group has their own supervisor.
+                  </div>
+                </div>
+              ):(
+                <SectionLabel count={editSelT.length}>Assigned Teachers</SectionLabel>
+              )}
+              <Checklist items={teachers} selected={editSelT} onToggle={id=>setEditSelT(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])} labelKey="full_name" emptyText="No teachers found" maxHeight={180}/>
+            </div>
+          ); })()}
           <div style={{ display:'flex',gap:'10px' }}>
             <button onClick={handleEditSave} style={{ ...btn,background:'#16a34a' }}><Check size={13}/> Save Changes</button>
             <button onClick={()=>setEditCourse(null)} style={{ padding:'9px 18px',border:'1px solid #dde3e8',borderRadius:'7px',background:'white',color:'#5a7080',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit' }}>Cancel</button>
@@ -552,24 +625,35 @@ function CourseTab() {
         </div>
       )}
 
-      {/* ── Add New Course ── */}
       {!editCourse&&(
         <div style={card}>
           <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Course</div>
           <form onSubmit={handleSubmit}>
-            <div style={{ display:'grid',gridTemplateColumns:'1fr 2fr 1fr 1fr 1fr',gap:'12px',marginBottom:'12px' }}>
+            <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 2fr 1fr 1fr',gap:'12px',marginBottom:'12px' }}>
               <div><label style={fl}>Code *</label><input style={fi} placeholder="OOP" value={form.code} onChange={e=>setForm(f=>({...f,code:e.target.value}))} required/></div>
               <div><label style={fl}>Course Name *</label><input style={fi} placeholder="Object Oriented Programming" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} required/></div>
               <div><label style={fl}>Short Name</label><input style={fi} placeholder="OOP" value={form.short_name} onChange={e=>setForm(f=>({...f,short_name:e.target.value}))}/></div>
               <div><label style={fl}>Credit Hours</label><input style={fi} type="number" min="1" max="6" value={form.credit_hours} onChange={e=>setForm(f=>({...f,credit_hours:parseInt(e.target.value)}))}/></div>
-              <div><label style={fl}>Department</label><select style={fi} value={form.department_id} onChange={e=>setForm(f=>({...f,department_id:e.target.value}))}><option value="">Select</option>{depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
             </div>
             <label style={{ display:'flex',alignItems:'center',gap:'8px',fontSize:'12px',color:'#1a2e3a',fontWeight:'500',marginBottom:'16px',cursor:'pointer' }}>
               <input type="checkbox" checked={form.has_lab} onChange={e=>setForm(f=>({...f,has_lab:e.target.checked}))} style={{ width:'14px',height:'14px',accentColor:'#2d4a5a',cursor:'pointer' }}/>
               This course includes a Lab session (3-hour slot)
             </label>
-            <div style={{ border:'2px solid #dde3e8',borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
-              <SectionLabel count={selTeachers.length}>Assign Teachers to this Course *</SectionLabel>
+            <div style={{ border:`2px solid ${isFYP(form)?'#fde68a':'#dde3e8'}`,borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
+              {isFYP(form)?(
+                <div style={{ marginBottom:'10px' }}>
+                  <div style={{ display:'flex',alignItems:'center',gap:'7px',marginBottom:'6px' }}>
+                    <div style={{ fontSize:'11px',fontWeight:'700',color:'#2d4a5a',textTransform:'uppercase',letterSpacing:'0.5px' }}>Assign Supervisor (Optional)</div>
+                    <span style={{ background:'#fef3c7',color:'#92400e',border:'1px solid #fde68a',fontSize:'9px',fontWeight:'700',borderRadius:'4px',padding:'1px 7px' }}>FYP</span>
+                  </div>
+                  <div style={{ background:'#fef3c7',border:'1px solid #fde68a',borderRadius:'7px',padding:'8px 12px',fontSize:'12px',color:'#92400e',display:'flex',alignItems:'flex-start',gap:'7px' }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5" style={{ flexShrink:0,marginTop:'1px' }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    FYP supervisor assignment is optional. Each student group has their own supervisor and meets individually. You can leave this empty.
+                  </div>
+                </div>
+              ):(
+                <SectionLabel count={selTeachers.length}>Assign Teachers to this Course *</SectionLabel>
+              )}
               <Checklist items={teachers} selected={selTeachers} onToggle={toggle} labelKey="full_name" emptyText="No teachers found"/>
             </div>
             <button type="submit" style={btn}><Plus size={13}/> Add Course</button>
@@ -577,33 +661,31 @@ function CourseTab() {
         </div>
       )}
 
-      {/* ── Course Directory ── */}
-      <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px' }}><BookOpen size={14}/> Course Directory <span style={{ fontSize:'11px',color:'#7a9aaa',fontWeight:'400' }}>— click Edit to manage teachers</span></div>
+      <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px' }}><BookOpen size={14}/> Course Directory <span style={{ fontSize:'11px',color:'#7a9aaa',fontWeight:'400' }}>— click Edit to manage teachers</span></div>
+      <SearchBar value={search} onChange={setSearch} placeholder="Search by name, code or short name..."/>
       <div style={{ borderRadius:'10px',overflow:'hidden',border:'1px solid #e0e8ed' }}>
         <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
           <thead><tr style={{ background:'#2d4a5a',color:'white' }}>
-            {['Code','Course Name','Short Name','Credits','Dept','Lab','Action'].map(h=>(
+            {['Code','Course Name','Short Name','Credits','Lab','Action'].map(h=>(
               <th key={h} style={{ padding:'10px 14px',textAlign:'left',fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px' }}>{h}</th>
             ))}
           </tr></thead>
           <tbody>
-            {subjects.map(s=>(
+            {filtered.map(s=>(
               <tr key={s.id} style={{ borderBottom:'0.5px solid #e8edf0',background:editCourse?.id===s.id?'#f0f6fa':'white' }}>
                 <td style={{ padding:'10px 14px' }}><strong style={{ fontFamily:'monospace',color:'#2d4a5a' }}>{s.code}</strong></td>
                 <td style={{ padding:'10px 14px',fontWeight:'600',color:'#1a2e3a' }}>{s.name}</td>
                 <td style={{ padding:'10px 14px' }}><span style={{ background:'#e8f4fd',color:'#1a5a7a',border:'1px solid #b8d9f5',borderRadius:'10px',padding:'2px 9px',fontSize:'10px',fontWeight:'600' }}>{s.short_name}</span></td>
                 <td style={{ padding:'10px 14px',textAlign:'center',color:'#5a7080' }}>{s.credit_hours}</td>
-                <td style={{ padding:'10px 14px',color:'#5a7080' }}>{s.department_name||'—'}</td>
                 <td style={{ padding:'10px 14px',textAlign:'center' }}>{s.has_lab?<Check size={14} color="#16a34a"/>:<X size={14} color="#aabbc8"/>}</td>
                 <td style={{ padding:'10px 14px' }}>
-                  <button onClick={()=>openEdit(s)}
-                    style={{ background:editCourse?.id===s.id?'#2d4a5a':'transparent',color:editCourse?.id===s.id?'white':'#2d4a5a',border:'1px solid #2d4a5a',padding:'5px 14px',borderRadius:'6px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'5px' }}>
+                  <button onClick={()=>openEdit(s)} style={{ background:editCourse?.id===s.id?'#2d4a5a':'transparent',color:editCourse?.id===s.id?'white':'#2d4a5a',border:'1px solid #2d4a5a',padding:'5px 14px',borderRadius:'6px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'5px' }}>
                     <Pencil size={11}/> {editCourse?.id===s.id?'Editing':'Edit'}
                   </button>
                 </td>
               </tr>
             ))}
-            {subjects.length===0&&<tr><td colSpan="7" style={{ padding:'28px',textAlign:'center',color:'#aabbc8' }}>No courses found.</td></tr>}
+            {filtered.length===0&&<tr><td colSpan="6" style={{ padding:'28px',textAlign:'center',color:'#aabbc8' }}>{search?'No courses match your search.':'No courses found.'}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -639,26 +721,15 @@ function ClassroomTab() {
           <button type="submit" style={btn}><Plus size={13}/> Add Classroom</button>
         </form>
       </div>
-
       <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px' }}><Building2 size={14}/> Classroom Status</div>
       <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:'12px' }}>
         {rooms.map(r=>(
-          <div key={r.id} style={{ background:'white', border:`1.5px solid ${editId===r.id?'#2d4a5a':'#c8d8e0'}`,borderRadius:'10px',padding:'14px',overflow:'hidden',transition:'all 0.15s' }}>
+          <div key={r.id} style={{ background:'white',border:`1.5px solid ${editId===r.id?'#2d4a5a':'#c8d8e0'}`,borderRadius:'10px',padding:'14px',overflow:'hidden',transition:'all 0.15s' }}>
             {editId===r.id?(
               <div>
                 <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px' }}><Pencil size={12}/> {r.room_id}</div>
-                <div style={{ marginBottom:'8px' }}>
-                  <label style={fl}>Capacity</label>
-                  <input style={fi} type="number" value={editForm.capacity} onChange={e=>setEditForm(f=>({...f,capacity:parseInt(e.target.value)}))}/>
-                </div>
-                <div style={{ marginBottom:'12px' }}>
-                  <label style={fl}>Type</label>
-                  <select style={fi} value={editForm.room_type} onChange={e=>setEditForm(f=>({...f,room_type:e.target.value}))}>
-                    <option value="classroom">Classroom</option>
-                    <option value="lab">Lab</option>
-                    <option value="auditorium">Auditorium</option>
-                  </select>
-                </div>
+                <div style={{ marginBottom:'8px' }}><label style={fl}>Capacity</label><input style={fi} type="number" value={editForm.capacity} onChange={e=>setEditForm(f=>({...f,capacity:parseInt(e.target.value)}))}/></div>
+                <div style={{ marginBottom:'12px' }}><label style={fl}>Type</label><select style={fi} value={editForm.room_type} onChange={e=>setEditForm(f=>({...f,room_type:e.target.value}))}><option value="classroom">Classroom</option><option value="lab">Lab</option><option value="auditorium">Auditorium</option></select></div>
                 <div style={{ display:'flex',gap:'6px' }}>
                   <button onClick={()=>handleUpd(r.id)} style={{ flex:1,background:'#16a34a',color:'white',border:'none',padding:'7px',borderRadius:'6px',fontSize:'11px',fontWeight:'700',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'4px' }}><Check size={11}/> Save</button>
                   <button onClick={()=>setEditId(null)} style={{ background:'#f0f4f7',color:'#5a7080',border:'1px solid #dde3e8',padding:'7px 10px',borderRadius:'6px',fontSize:'11px',cursor:'pointer',display:'flex',alignItems:'center',gap:'3px' }}><X size={11}/></button>
@@ -671,11 +742,8 @@ function ClassroomTab() {
                   <span style={{ background:r.is_available?'#dcfce7':'#fef2f2',color:r.is_available?'#16a34a':'#dc2626',fontSize:'9px',fontWeight:'700',padding:'2px 8px',borderRadius:'8px' }}>{r.is_available?'Free':'Busy'}</span>
                 </div>
                 <div style={{ fontSize:'11px',color:'#5a7080',marginBottom:'2px' }}>Capacity: <strong style={{ color:'#1a2e3a' }}>{r.capacity}</strong></div>
-                <div style={{ fontSize:'11px',color:'#5a7080',marginBottom:'12px',textTransform:'capitalize' }}>
-                  Type: <strong style={{ color:'#1a2e3a' }}>{r.room_type}</strong>
-                </div>
-                <button onClick={()=>{ setEditId(r.id); setEditForm({capacity:r.capacity,room_type:r.room_type}); }}
-                  style={{ width:'100%',background:'#2d4a5a',color:'white',border:'none',padding:'7px',borderRadius:'6px',fontSize:'11px',fontWeight:'700',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'5px' }}>
+                <div style={{ fontSize:'11px',color:'#5a7080',marginBottom:'12px',textTransform:'capitalize' }}>Type: <strong style={{ color:'#1a2e3a' }}>{r.room_type}</strong></div>
+                <button onClick={()=>{ setEditId(r.id); setEditForm({capacity:r.capacity,room_type:r.room_type}); }} style={{ width:'100%',background:'#2d4a5a',color:'white',border:'none',padding:'7px',borderRadius:'6px',fontSize:'11px',fontWeight:'700',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'5px' }}>
                   <Pencil size={11}/> Edit
                 </button>
               </>
@@ -696,14 +764,16 @@ function EnrollmentTab() {
   const [filterBatch, setFilterB] = useState('');
   const [subTab,   setSubTab]   = useState('manual');
   const [m,        setM]        = useState(null);
-  const [editStu,  setEditStu]  = useState(null); // student being edited
+  const [editStu,  setEditStu]  = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [search,   setSearch]   = useState('');
   const showMsg=(ok,text)=>{ setM({ok,text}); setTimeout(()=>setM(null),5000); };
+
   useEffect(()=>{
     api.get('/office/batches').then(r=>setBatches(r.data));
     api.get('/office/departments').then(r=>setDepts(r.data));
   },[]);
-  // Load students — always fetch fresh from server
+
   const loadStudents=React.useCallback((bid)=>{
     const batchId = bid !== undefined ? bid : filterBatch;
     const p = batchId ? {batch_id:batchId} : {};
@@ -719,6 +789,12 @@ function EnrollmentTab() {
     }catch(err){ showMsg(false,err.response?.data?.message||'Error'); }
   };
 
+  const filtered = students.filter(s=>
+    s.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+    s.student_id?.toLowerCase().includes(search.toLowerCase()) ||
+    s.batch_name?.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <div>
       {m&&<div style={msg(m.ok)}>{m.ok?<Check size={13}/>:<X size={13}/>} {m.text}</div>}
@@ -729,7 +805,7 @@ function EnrollmentTab() {
       </div>
       {subTab==='manual'&&<div style={card}><div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'14px',display:'flex',alignItems:'center',gap:'7px' }}><Plus size={14}/> Add Student</div><EnrollManual batches={batches} depts={depts} onSuccess={()=>{ showMsg(true,'Student enrolled.'); loadStudents(); }} onError={t=>showMsg(false,t)}/></div>}
       {subTab==='bulk'&&<EnrollBulk batches={batches} onSuccess={(r,bid)=>{ showMsg(true,r); loadStudents(bid||''); }} onError={t=>showMsg(false,t)}/>}
-      {/* Edit student panel */}
+
       {editStu&&(
         <div style={{ marginTop:'16px',border:'2px solid #2d4a5a',borderRadius:'10px',padding:'16px',background:'#f8fafc' }}>
           <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'14px' }}>
@@ -747,15 +823,16 @@ function EnrollmentTab() {
       )}
 
       <div style={{ marginTop:'20px' }}>
-        <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px' }}>
+        <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'10px' }}>
           <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',display:'flex',alignItems:'center',gap:'6px' }}>
             <Users size={14}/> Enrolled Students
-            <span style={{ fontSize:'11px',color:'#7a9aaa',fontWeight:'400' }}>({students.length} total)</span>
+            <span style={{ fontSize:'11px',color:'#7a9aaa',fontWeight:'400' }}>({filtered.length}{search||filterBatch?' shown':` total`})</span>
           </div>
           <select value={filterBatch} onChange={e=>setFilterB(e.target.value)} style={{ padding:'6px 10px',border:'1px solid #dde3e8',borderRadius:'6px',fontSize:'12px',fontFamily:'inherit',color:'#1a2e3a',outline:'none' }}>
             <option value="">All Batches</option>{batches.map(b=><option key={b.id} value={b.id}>{b.batch_name}</option>)}
           </select>
         </div>
+        <SearchBar value={search} onChange={setSearch} placeholder="Search by name, student ID or batch..."/>
         <div style={{ borderRadius:'10px',overflow:'hidden',border:'1px solid #e0e8ed' }}>
           <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
             <thead><tr style={{ background:'#2d4a5a',color:'white' }}>
@@ -764,7 +841,7 @@ function EnrollmentTab() {
               ))}
             </tr></thead>
             <tbody>
-              {students.map(s=>(
+              {filtered.map(s=>(
                 <tr key={s.id} style={{ borderBottom:'0.5px solid #e8edf0',background:editStu?.id===s.id?'#f0f6fa':'white' }}>
                   <td style={{ padding:'9px 14px' }}><strong style={{ fontFamily:'monospace',color:'#2d4a5a' }}>{s.student_id}</strong></td>
                   <td style={{ padding:'9px 14px',fontWeight:'600',color:'#1a2e3a' }}>{s.full_name}</td>
@@ -779,7 +856,7 @@ function EnrollmentTab() {
                   </td>
                 </tr>
               ))}
-              {students.length===0&&<tr><td colSpan="6" style={{ padding:'28px',textAlign:'center',color:'#aabbc8' }}>No students enrolled yet.</td></tr>}
+              {filtered.length===0&&<tr><td colSpan="6" style={{ padding:'28px',textAlign:'center',color:'#aabbc8' }}>{search?'No students match your search.':'No students enrolled yet.'}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -789,7 +866,6 @@ function EnrollmentTab() {
 }
 
 function EnrollManual({ batches, depts, onSuccess, onError }) {
-  const { isMobile } = useResponsive();
   const [form,setForm]=useState({student_id:'',first_name:'',last_name:'',email:'',batch_id:'',department_id:''});
   const [loading,setLoading]=useState(false);
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
@@ -826,19 +902,13 @@ function EnrollBulk({ batches, onSuccess, onError }) {
     if(!batchId){onError('Select a batch.');return;}
     setLoading(true); setResult(null);
     try{
-      const fd=new FormData();
-      fd.append('file',file);
-      fd.append('batch_id',batchId);
+      const fd=new FormData(); fd.append('file',file); fd.append('batch_id',batchId);
       const res=await api.post('/enrollment/bulk',fd,{headers:{'Content-Type':'multipart/form-data'}});
-      setResult(res.data);
-      setFile(null);
+      setResult(res.data); setFile(null);
       if(fileRef.current) fileRef.current.value='';
       onSuccess(`Enrolled ${res.data.enrolled} of ${res.data.total} students.`, batchId);
-    }catch(err){
-      console.error('Bulk upload error:',err);
-      const msg = err.response?.data?.message || 'Upload failed.';
-      onError(msg);
-    }finally{ setLoading(false); }
+    }catch(err){ onError(err.response?.data?.message||'Upload failed.'); }
+    finally{ setLoading(false); }
   };
   return (
     <div style={card}>
@@ -862,24 +932,8 @@ function EnrollBulk({ batches, onSuccess, onError }) {
           </div>
         </div>
         <div style={{ background:'#f8fafc',border:'1px solid #e0e8ed',borderRadius:'8px',padding:'14px' }}>
-          {result?(
-            <div>
-              <div style={{ fontSize:'12px',fontWeight:'700',color:'#1a2e3a',marginBottom:'10px' }}>Upload Result</div>
-              <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px' }}>
-                {[['Total',result.total,'#2d4a5a'],['Enrolled',result.enrolled,'#16a34a'],['Skipped',result.skipped,'#d97706']].map(([l,v,c])=>(
-                  <div key={l} style={{ background:'white',borderRadius:'7px',padding:'10px',textAlign:'center',border:'1px solid #e0e8ed' }}>
-                    <div style={{ fontSize:'22px',fontWeight:'800',color:c }}>{v}</div>
-                    <div style={{ fontSize:'9px',color:'#7a9aaa',fontWeight:'600',textTransform:'uppercase' }}>{l}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ):(
-            <div style={{ textAlign:'center',padding:'20px',color:'#aabbc8' }}>
-              <div style={{ fontSize:'12px',fontWeight:'600',marginBottom:'6px' }}>Upload a file to see results</div>
-              <div style={{ fontSize:'11px' }}>Default password = student ID (lowercase)</div>
-            </div>
-          )}
+          {result?(<div><div style={{ fontSize:'12px',fontWeight:'700',color:'#1a2e3a',marginBottom:'10px' }}>Upload Result</div><div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px' }}>{[['Total',result.total,'#2d4a5a'],['Enrolled',result.enrolled,'#16a34a'],['Skipped',result.skipped,'#d97706']].map(([l,v,c])=>(<div key={l} style={{ background:'white',borderRadius:'7px',padding:'10px',textAlign:'center',border:'1px solid #e0e8ed' }}><div style={{ fontSize:'22px',fontWeight:'800',color:c }}>{v}</div><div style={{ fontSize:'9px',color:'#7a9aaa',fontWeight:'600',textTransform:'uppercase' }}>{l}</div></div>))}</div></div>)
+          :(<div style={{ textAlign:'center',padding:'20px',color:'#aabbc8' }}><div style={{ fontSize:'12px',fontWeight:'600',marginBottom:'6px' }}>Upload a file to see results</div><div style={{ fontSize:'11px' }}>Default password = student ID (lowercase)</div></div>)}
         </div>
       </div>
     </div>
@@ -902,7 +956,6 @@ function ApprovalsTab({ onCountChange }) {
   useEffect(()=>{ load(); },[]);
   const approve=async id=>{ await api.post(`/approvals/${id}/approve`,{review_note:note||'Approved'}); setReviewing(null);setNote('');load(); };
   const reject=async id=>{ if(!note.trim()){alert('Please provide a rejection reason.');return;} await api.post(`/approvals/${id}/reject`,{review_note:note}); setReviewing(null);setNote('');load(); };
-
   const pending=requests.filter(r=>r.status==='pending');
 
   const renderSummary=req=>{
@@ -911,37 +964,9 @@ function ApprovalsTab({ onCountChange }) {
     const isTeacher=req.requested_by_juw?.startsWith('T');
     const who=isTeacher?`${req.requested_by_name||'Teacher'}`:'Office Assistant';
     const grid={ display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:'10px' };
-
-    if(type==='update') return (
-      <div>
-        <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'10px' }}>{who} wants to reschedule a class</div>
-        {d.teacher_reason&&<div style={{ background:'#fef3c7',border:'1px solid #fde68a',borderRadius:'7px',padding:'8px 12px',marginBottom:'10px',fontSize:'12px',color:'#92400e' }}><strong>Reason:</strong> {d.teacher_reason}</div>}
-        <div style={{ fontSize:'10px',fontWeight:'700',color:'#dc2626',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'5px' }}>From</div>
-        <div style={{ ...grid,background:'#fef2f2',border:'1px solid #fecaca',borderRadius:'8px',padding:'10px',marginBottom:'10px' }}>
-          <SummaryItem label="Subject" value={d.old_subject_name||d.subject_name||'—'}/><SummaryItem label="Day" value={d.old_day||'—'}/><SummaryItem label="Time" value={d.old_slot_label||'—'}/><SummaryItem label="Room" value={d.old_room_code||'—'}/>
-        </div>
-        <div style={{ fontSize:'10px',fontWeight:'700',color:'#16a34a',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'5px' }}>To</div>
-        <div style={{ ...grid,background:'#f0fdf4',border:'1px solid #86efac',borderRadius:'8px',padding:'10px' }}>
-          <SummaryItem label="Subject" value={d.subject_name||'—'}/><SummaryItem label="Day" value={d.day||'—'}/><SummaryItem label="Time" value={d.slot_label||'—'}/><SummaryItem label="Room" value={d.room_code||'—'}/>
-        </div>
-      </div>
-    );
-    if(type==='create') return (
-      <div>
-        <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'10px' }}>{who} wants to add a new class</div>
-        <div style={{ ...grid,background:'#f0fdf4',border:'1px solid #86efac',borderRadius:'8px',padding:'10px' }}>
-          <SummaryItem label="Subject" value={d.subject_name||'—'}/><SummaryItem label="Teacher" value={d.teacher_name||'—'}/><SummaryItem label="Batch" value={d.batch_name||'—'}/><SummaryItem label="Room" value={d.room_code||'—'}/><SummaryItem label="Day" value={d.day||'—'}/><SummaryItem label="Time" value={d.slot_label||'—'}/>
-        </div>
-      </div>
-    );
-    if(type==='delete') return (
-      <div>
-        <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'10px' }}>{who} wants to remove a class</div>
-        <div style={{ ...grid,background:'#fef2f2',border:'1px solid #fecaca',borderRadius:'8px',padding:'10px' }}>
-          <SummaryItem label="Subject" value={d.subject_name||'—'}/><SummaryItem label="Teacher" value={d.teacher_name||'—'}/><SummaryItem label="Batch" value={d.batch_name||'—'}/><SummaryItem label="Room" value={d.room_code||'—'}/><SummaryItem label="Day" value={d.day||'—'}/><SummaryItem label="Time" value={d.slot_label||'—'}/>
-        </div>
-      </div>
-    );
+    if(type==='update') return (<div><div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'10px' }}>{who} wants to reschedule a class</div>{d.teacher_reason&&<div style={{ background:'#fef3c7',border:'1px solid #fde68a',borderRadius:'7px',padding:'8px 12px',marginBottom:'10px',fontSize:'12px',color:'#92400e' }}><strong>Reason:</strong> {d.teacher_reason}</div>}<div style={{ fontSize:'10px',fontWeight:'700',color:'#dc2626',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'5px' }}>From</div><div style={{ ...grid,background:'#fef2f2',border:'1px solid #fecaca',borderRadius:'8px',padding:'10px',marginBottom:'10px' }}><SummaryItem label="Subject" value={d.old_subject_name||d.subject_name||'—'}/><SummaryItem label="Day" value={d.old_day||'—'}/><SummaryItem label="Time" value={d.old_slot_label||'—'}/><SummaryItem label="Room" value={d.old_room_code||'—'}/></div><div style={{ fontSize:'10px',fontWeight:'700',color:'#16a34a',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'5px' }}>To</div><div style={{ ...grid,background:'#f0fdf4',border:'1px solid #86efac',borderRadius:'8px',padding:'10px' }}><SummaryItem label="Subject" value={d.subject_name||'—'}/><SummaryItem label="Day" value={d.day||'—'}/><SummaryItem label="Time" value={d.slot_label||'—'}/><SummaryItem label="Room" value={d.room_code||'—'}/></div></div>);
+    if(type==='create') return (<div><div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'10px' }}>{who} wants to add a new class</div><div style={{ ...grid,background:'#f0fdf4',border:'1px solid #86efac',borderRadius:'8px',padding:'10px' }}><SummaryItem label="Subject" value={d.subject_name||'—'}/><SummaryItem label="Teacher" value={d.teacher_name||'—'}/><SummaryItem label="Batch" value={d.batch_name||'—'}/><SummaryItem label="Room" value={d.room_code||'—'}/><SummaryItem label="Day" value={d.day||'—'}/><SummaryItem label="Time" value={d.slot_label||'—'}/></div></div>);
+    if(type==='delete') return (<div><div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'10px' }}>{who} wants to remove a class</div><div style={{ ...grid,background:'#fef2f2',border:'1px solid #fecaca',borderRadius:'8px',padding:'10px' }}><SummaryItem label="Subject" value={d.subject_name||'—'}/><SummaryItem label="Teacher" value={d.teacher_name||'—'}/><SummaryItem label="Batch" value={d.batch_name||'—'}/><SummaryItem label="Room" value={d.room_code||'—'}/><SummaryItem label="Day" value={d.day||'—'}/><SummaryItem label="Time" value={d.slot_label||'—'}/></div></div>);
     return <div style={{ fontSize:'12px',color:'#5a7080' }}>Request details unavailable.</div>;
   };
 

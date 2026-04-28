@@ -144,11 +144,14 @@ async function enrichRequestData(data) {
 const createEntry = async (req, res) => {
   try {
     const { batch_id, subject_id, teacher_id, room_id, day, time_slot, is_lab, semester } = req.body;
-    if (!batch_id || !subject_id || !teacher_id || !room_id || !day || !time_slot)
-      return res.status(400).json({ message: 'All fields are required.' });
+    // Check if this is an FYP course — teacher is optional for FYP
+    const subjectRes = await pool.query('SELECT has_lab, name, code FROM subjects WHERE id=$1', [subject_id]);
+    const isFYP = /fyp|final.year.project/i.test((subjectRes.rows[0]?.name||'')+' '+(subjectRes.rows[0]?.code||''));
+
+    if (!batch_id || !subject_id || (!teacher_id && !isFYP) || !room_id || !day || !time_slot)
+      return res.status(400).json({ message: isFYP ? 'batch_id, subject_id, room_id, day and time_slot are required.' : 'All fields are required.' });
 
     // Check if subject has lab — force is_lab if so
-    const subjectRes = await pool.query('SELECT has_lab FROM subjects WHERE id=$1', [subject_id]);
     const subjectHasLab = subjectRes.rows[0]?.has_lab || false;
     const finalIsLab = is_lab || false;
 
@@ -159,17 +162,18 @@ const createEntry = async (req, res) => {
       });
     }
 
-    const conflicts = await detectConflicts({ batch_id, teacher_id, room_id, day, time_slot });
+    const conflicts = await detectConflicts({ batch_id, teacher_id: teacher_id||null, room_id, day, time_slot });
     if (conflicts.length) return res.status(409).json({ message: 'Conflict detected', conflicts });
 
     const slot_label = getSlotLabel(time_slot, finalIsLab);
 
 
 
+    const finalTeacherId = teacher_id || null;  // null for FYP courses
     const result = await pool.query(
       `INSERT INTO timetable (batch_id,subject_id,teacher_id,room_id,day,time_slot,slot_label,is_lab,semester)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [batch_id, subject_id, teacher_id, room_id||null, day, time_slot, slot_label, finalIsLab, semester || 1]
+      [batch_id, subject_id, finalTeacherId, room_id||null, day, time_slot, slot_label, finalIsLab, semester || 1]
     );
     const created = result.rows[0];
     // Notify affected teacher and students
@@ -198,17 +202,16 @@ const updateEntry = async (req, res) => {
     const { id } = req.params;
     const { batch_id, subject_id, teacher_id, room_id, day, time_slot, is_lab } = req.body;
 
-    const conflicts = await detectConflicts({ batch_id, teacher_id, room_id, day, time_slot, exclude_id: id });
+    const finalTeacherId = teacher_id || null;
+    const conflicts = await detectConflicts({ batch_id, teacher_id: finalTeacherId, room_id, day, time_slot, exclude_id: id });
     if (conflicts.length) return res.status(409).json({ message: 'Conflict detected', conflicts });
 
     const slot_label = getSlotLabel(time_slot, is_lab);
 
-
-
     const result = await pool.query(
       `UPDATE timetable SET batch_id=$1,subject_id=$2,teacher_id=$3,room_id=$4,
        day=$5,time_slot=$6,slot_label=$7,is_lab=$8,updated_at=NOW() WHERE id=$9 RETURNING *`,
-      [batch_id, subject_id, teacher_id, room_id, day, time_slot, slot_label, is_lab || false, id]
+      [batch_id, subject_id, finalTeacherId, room_id, day, time_slot, slot_label, is_lab || false, id]
     );
     if (!result.rows.length) return res.status(404).json({ message: 'Entry not found.' });
     res.json(result.rows[0]);
