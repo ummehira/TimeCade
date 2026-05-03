@@ -445,7 +445,7 @@ function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, 
                               <div style={{ opacity:0.75,fontSize:'9px',marginTop:'1px' }}>{entry.room_code}</div>
                               <div style={{ opacity:0.6,fontSize:'8.5px',marginTop:'1px',fontStyle:'italic' }}>{entry.slot_label}</div>
                               {canEdit&&(
-                                <div style={{ position:'absolute',top:'3px',right:'3px',background:'rgba(255,255,255,0.18)',borderRadius:'4px',padding:'1px 5px',fontSize:'8px',fontWeight:'600' }}>
+                                <div style={{ position:'absolute',bottom:'3px',right:'3px',background:'rgba(255,255,255,0.18)',borderRadius:'4px',padding:'1px 5px',fontSize:'8px',fontWeight:'600' }}>
                                   click to edit
                                 </div>
                               )}
