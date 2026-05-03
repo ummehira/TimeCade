@@ -17,9 +17,10 @@ const LAB_SLOTS = {
   2:'10:00 - 1:00 (Lab)',
   3:'11:00 - 2:00 (Lab)',
 };
+// Slots 4 and 5 are invalid for labs (would exceed 2:00 PM)
 const VALID_LAB_SLOTS = [1, 2, 3];
-const CELL_NAVY  = '#184258';
-const CELL_GREEN = '#0f495d';
+const CELL_NAVY  = '#2d4a5a';
+const CELL_GREEN = '#3a6070';
 
 // ── Conflict Alert ────────────────────────────────────────────────────────
 function ConflictAlert({ conflicts, onClose }) {
@@ -57,12 +58,14 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
   const [batchDefaultRoom, setBatchDefaultRoom] = useState(null);
 
   useEffect(()=>{ if(selectedBatch) setFormBatch(selectedBatch); },[selectedBatch]);
-  useEffect(()=>{ setFormSemester(semester||1); },[semester]);
+  useEffect(()=>{ setFormSemester(semester); },[semester]);
 
   useEffect(()=>{
     if(!formBatch){ setBatchCourses([]); setBatchDefaultRoom(null); return; }
+    // Load courses for batch
     api.get('/assignments/batch-courses',{params:{batch_id:formBatch,semester:formSemester}})
       .then(r=>setBatchCourses(r.data)).catch(()=>setBatchCourses([]));
+    // Load batch default room from batches state
     const batch = batches.find(b=>String(b.id)===String(formBatch));
     const defRoom = batch?.default_room_id || null;
     setBatchDefaultRoom(defRoom ? String(defRoom) : null);
@@ -79,9 +82,14 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
   },[form.subject_id]);
 
   const course    = batchCourses.find(s=>String(s.id)===String(form.subject_id));
+  const isFYP     = course?.credit_format === '0+3' ||
+                    /fyp|final.year.project|fyp-i|fyp-ii|fyp1|fyp2/i.test(
+                      (course?.name||'')+' '+(course?.code||'')+' '+(course?.short_name||'')
+                    );
   const slotLabel = form.time_slot ? (form.is_lab ? LAB_SLOTS[form.time_slot] : SLOTS.find(s=>s.id===parseInt(form.time_slot))?.full) : null;
   const roomReady = batchDefaultRoom || form.room_id;
-  const canAdd    = formBatch&&roomReady&&form.subject_id&&form.teacher_id&&form.day&&form.time_slot&&!loading;
+  const teacherReady = isFYP || form.teacher_id;
+  const canAdd    = formBatch&&roomReady&&form.subject_id&&teacherReady&&form.day&&form.time_slot&&!loading;
 
   const fl = { fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',display:'block',marginBottom:'5px' };
   const fi = { width:'100%',padding:'8px 10px',border:'1px solid #dde3e8',borderRadius:'6px',fontSize:'12px',fontFamily:'inherit',color:'#1a2e3a',outline:'none',background:'white' };
@@ -119,15 +127,20 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
           </select>
         </div>
         <div>
-          <label style={fl}>Teacher {form.subject_id&&courseTeachers.length===0&&<span style={{ color:'#d97706',fontWeight:'400',textTransform:'none' }}>(assign teachers first)</span>}</label>
+          <label style={fl}>
+            Teacher{' '}
+            {isFYP
+              ? <span style={{ color:'#d97706',fontWeight:'600',textTransform:'none',background:'#fef3c7',border:'1px solid #fde68a',borderRadius:'4px',padding:'1px 6px',fontSize:'9px' }}>Optional for FYP</span>
+              : form.subject_id&&courseTeachers.length===0&&<span style={{ color:'#d97706',fontWeight:'400',textTransform:'none' }}>(assign teachers first)</span>
+            }
+          </label>
           <select value={form.teacher_id} onChange={e=>set('teacher_id',e.target.value)} disabled={!form.subject_id} style={{ ...fi,background:!form.subject_id?'#f8fafc':'white' }}>
-            <option value="">-- Select Teacher --</option>
+            <option value="">{isFYP ? '-- No supervisor (individual groups)' : '-- Select Teacher --'}</option>
             {courseTeachers.map(t=><option key={t.id} value={t.id}>{t.full_name}</option>)}
           </select>
         </div>
       </div>
-
-      {/* Room info */}
+      {/* Room info — shown as read-only from batch default */}
       {batchDefaultRoom ? (
         <div style={{ background:'#f0fdf4',border:'1px solid #86efac',borderRadius:'7px',padding:'8px 14px',marginBottom:'10px',fontSize:'12px',color:'#166534',display:'flex',alignItems:'center',gap:'7px' }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
@@ -163,6 +176,7 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
           <input type="checkbox" checked={form.is_lab} onChange={e=>{
             const newIsLab = e.target.checked;
             set('is_lab', newIsLab);
+            // Clear time slot if it's invalid for a lab
             if(newIsLab && form.time_slot && !VALID_LAB_SLOTS.includes(parseInt(form.time_slot))){
               set('time_slot','');
             }
@@ -183,6 +197,7 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
   );
 }
 
+// ── Editable Class Card Popup ─────────────────────────────────────────────
 // ── Editable Class Card Popup ─────────────────────────────────────────────
 function EditCardPopup({ entry, teachers, rooms, onSave, onDelete, onClose }) {
   const [courseTeachers, setCourseTeachers] = useState([]);
@@ -216,6 +231,7 @@ function EditCardPopup({ entry, teachers, rooms, onSave, onDelete, onClose }) {
 
         {/* Body */}
         <div style={{ padding:'20px' }}>
+          {/* Info */}
           <div style={{ background:'#f8fafc',borderRadius:'8px',padding:'10px 14px',marginBottom:'16px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px',fontSize:'12px',color:'#5a7080' }}>
             <div>Batch: <strong style={{ color:'#1a2e3a' }}>{entry.batch_name||'—'}</strong></div>
             <div>Teacher: <strong style={{ color:'#1a2e3a' }}>{entry.teacher_name}</strong></div>
@@ -223,6 +239,7 @@ function EditCardPopup({ entry, teachers, rooms, onSave, onDelete, onClose }) {
             <div>Credits: <strong style={{ color:'#1a2e3a' }}>{entry.credit_hours||'—'}</strong></div>
           </div>
 
+          {/* Teacher */}
           <div style={{ marginBottom:'13px' }}>
             <label style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',display:'block',marginBottom:'5px' }}>Change Teacher</label>
             <select value={form.teacher_id} onChange={e=>set('teacher_id',parseInt(e.target.value))}
@@ -236,6 +253,7 @@ function EditCardPopup({ entry, teachers, rooms, onSave, onDelete, onClose }) {
             </select>
           </div>
 
+          {/* Room */}
           <div style={{ marginBottom:'20px' }}>
             <label style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',display:'block',marginBottom:'5px' }}>Change Room</label>
             <select value={form.room_id} onChange={e=>set('room_id',parseInt(e.target.value))}
@@ -246,6 +264,7 @@ function EditCardPopup({ entry, teachers, rooms, onSave, onDelete, onClose }) {
             </select>
           </div>
 
+          {/* Actions */}
           <div style={{ display:'flex',gap:'8px' }}>
             <button onClick={()=>onSave(entry.id,form)}
               style={{ flex:1,background:'#2d4a5a',color:'white',border:'none',padding:'11px',borderRadius:'8px',fontSize:'13px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px' }}>
@@ -263,6 +282,8 @@ function EditCardPopup({ entry, teachers, rooms, onSave, onDelete, onClose }) {
     </div>
   );
 }
+
+
 
 // ── Searchable dropdown ────────────────────────────────────────────────────
 function SearchableSelect({ label, value, onChange, options, placeholder='All' }) {
@@ -295,6 +316,7 @@ function SearchableSelect({ label, value, onChange, options, placeholder='All' }
       {open&&(
         <div style={{ position:'absolute',top:'calc(100% + 4px)',left:0,minWidth:'100%',background:'white',
           border:'1px solid #dde3e8',borderRadius:'8px',boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:9999,overflow:'hidden' }}>
+          {/* Search input */}
           <div style={{ padding:'8px',borderBottom:'1px solid #f0f4f7' }}>
             <div style={{ position:'relative' }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#aabbc8" strokeWidth="2.5"
@@ -307,6 +329,7 @@ function SearchableSelect({ label, value, onChange, options, placeholder='All' }
                   fontSize:'11px',fontFamily:'inherit',outline:'none',boxSizing:'border-box',color:'#1a2e3a' }}/>
             </div>
           </div>
+          {/* Options */}
           <div style={{ maxHeight:'180px',overflowY:'auto' }}>
             <div onClick={()=>{ onChange(''); setOpen(false); }}
               style={{ padding:'8px 12px',fontSize:'12px',cursor:'pointer',color:'#7a9aaa',fontStyle:'italic',
@@ -335,15 +358,23 @@ function SearchableSelect({ label, value, onChange, options, placeholder='All' }
   );
 }
 
-// ── Timetable Grid ────────────────────────────────────────────────────────
+// ── Timetable Grid — Days vertical, Times horizontal ─────────────────────
 function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, onDelete }) {
   const [dragOver,  setDragOver]  = useState(null);
   const [editEntry, setEditEntry] = useState(null);
   const dragRef = useRef(null);
 
+  // Build grid keyed by [day][slot]
   const grid = {};
   DAYS.forEach(d=>{ grid[d]={}; SLOTS.forEach(s=>{ grid[d][s.id]=[]; }); });
-  entries.forEach(e=>{ const sl=parseInt(e.time_slot); if(grid[e.day]?.[sl]!==undefined) grid[e.day][sl].push(e); });
+  entries.forEach(e=>{
+    const sl=parseInt(e.time_slot);
+    const day=e.day?.trim();
+    if(day && grid[day] !== undefined) {
+      if(grid[day][sl] === undefined) grid[day][sl] = [];
+      grid[day][sl].push(e);
+    }
+  });
 
   const onDragStart=(e,entry)=>{ dragRef.current=entry; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',String(entry.id)); };
   const onDragOver =(e,day,slot)=>{ e.preventDefault(); e.stopPropagation(); setDragOver(`${day}-${slot}`); };
@@ -351,7 +382,8 @@ function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, 
   const onDropCell =(e,day,slot)=>{ e.preventDefault(); e.stopPropagation(); setDragOver(null); if(dragRef.current&&onDrop) onDrop(dragRef.current,day,slot); dragRef.current=null; };
   const onDragEnd  =()=>{ dragRef.current=null; setDragOver(null); };
 
-  const ROW_H = 100;
+  const DAY_W  = 100; // px for day label column
+  const ROW_H  = 100; // px per day row
 
   return (
     <>
@@ -371,21 +403,24 @@ function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, 
               <col style={{ width:'100px' }}/>
               {SLOTS.map(s=><col key={s.id} style={{ width:`${100/SLOTS.length}%` }}/>)}
             </colgroup>
+            {/* ── Time header ── */}
             <thead>
               <tr>
-                <th style={{ background:CELL_NAVY,padding:'12px 8px',textAlign:'center',border:'1px solid rgba(255,255,255,0.1)' }}>
+                <th style={{ background:'#2d4a5a',padding:'12px 8px',textAlign:'center',border:'1px solid rgba(255,255,255,0.1)' }}>
                   <span style={{ fontSize:'10px',fontWeight:'700',color:'rgba(255,255,255,0.7)',textTransform:'uppercase',letterSpacing:'0.5px' }}>Day / Time</span>
                 </th>
                 {SLOTS.map(slot=>(
-                  <th key={slot.id} style={{ background:CELL_NAVY,padding:'12px 8px',textAlign:'center',border:'1px solid rgba(255,255,255,0.1)' }}>
+                  <th key={slot.id} style={{ background:'#2d4a5a',padding:'12px 8px',textAlign:'center',border:'1px solid rgba(255,255,255,0.1)' }}>
                     <div style={{ fontSize:'13px',fontWeight:'700',color:'white' }}>{slot.label}</div>
                     <div style={{ fontSize:'10px',color:'rgba(255,255,255,0.5)',marginTop:'2px' }}>to {SLOTS.find(s=>s.id===slot.id+1)?.label||'2:00'}</div>
                   </th>
                 ))}
               </tr>
             </thead>
+            {/* ── Day rows ── */}
             <tbody>
               {DAYS.map(day=>{
+                // Build row cells — skip slots occupied by a lab's colSpan
                 const skipSlots = new Set();
                 const rowCells = [];
                 SLOTS.forEach(slot=>{
@@ -393,6 +428,7 @@ function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, 
                   const cells = grid[day][slot.id]||[];
                   const labEntry = cells.find(e=>e.is_lab);
                   if(labEntry){
+                    // Lab spans 3 columns
                     skipSlots.add(slot.id+1);
                     skipSlots.add(slot.id+2);
                     rowCells.push({ slot, cells, colSpan:3, isLab:true });
@@ -403,7 +439,7 @@ function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, 
 
                 return (
                   <tr key={day} style={{ borderBottom:'1px solid #e8edf0' }}>
-                    <td style={{ background:'#f5f8fa',textAlign:'center',verticalAlign:'middle',padding:'8px 4px',height:`${ROW_H}px`,border:'1px solid #e8edf0',fontWeight:'700',fontSize:'12px',color:CELL_NAVY }}>
+                    <td style={{ background:'#f5f8fa',textAlign:'center',verticalAlign:'middle',padding:'8px 4px',height:`${ROW_H}px`,border:'1px solid #e8edf0',fontWeight:'700',fontSize:'12px',color:'#2d4a5a' }}>
                       {day}
                     </td>
                     {rowCells.map(({ slot, cells, colSpan })=>{
@@ -479,17 +515,19 @@ export default function TimetablePage({ canEdit=false }) {
   const [batches,       setBatches]       = useState([]);
   const [rooms,         setRooms]         = useState([]);
   const [teachers,      setTeachers]      = useState([]);
-  const [batchesData,   setBatchesData]   = useState([]);
+  const [batchesData,   setBatchesData]   = useState([]); // full batch objects with room info
   const [entries,       setEntries]       = useState([]);
   const [selBatch,      setSelBatch]      = useState(null);
-  const [selSemester,   setSelSemester]   = useState(null); // null = all sessions by default
+  const [selSemester,   setSelSemester]   = useState(1);
   const [filterTeacher, setFilterTeacher] = useState('');
   const [filterRoom,    setFilterRoom]    = useState('');
+  const [searchQuery,   setSearchQuery]   = useState('');
   const [conflicts,     setConflicts]     = useState([]);
   const [addLoading,    setAddLoading]    = useState(false);
   const [saveLoading,   setSaveLoading]   = useState(false);
   const [pendingMoves,  setPendingMoves]  = useState([]);
   const [toast,         setToast]         = useState({ msg:'', type:'' });
+  const filterBatch = selBatch;
 
   const showToast=(msg,type='success')=>{ setToast({msg,type}); setTimeout(()=>setToast({msg:'',type:''}),type==='error'?6000:3000); };
 
@@ -497,13 +535,14 @@ export default function TimetablePage({ canEdit=false }) {
     api.get('/office/batches').then(r=>{ setBatches(r.data); setBatchesData(r.data); });
     api.get('/office/rooms').then(r=>setRooms(r.data));
     api.get('/office/teachers').then(r=>setTeachers(r.data));
+    // Load saved batch room assignments from sessionStorage
   },[]);
 
   const loadEntries=useCallback(async()=>{
     if(!selBatch) return;
     try{
+      // Load all entries for the selected batch — semester shown as info only, not a filter
       const params = { batch_id: selBatch };
-      // Only add semester param if a specific session is selected
       if(selSemester) params.semester = selSemester;
       const r = await api.get('/timetable', { params });
       setEntries(r.data);
@@ -519,13 +558,21 @@ export default function TimetablePage({ canEdit=false }) {
   const displayEntries=entries
     .map(e=>{ const p=pendingMoves.find(m=>m.entry.id===e.id); return p?{...e,day:p.newDay,time_slot:p.newSlot,_pending:true}:e; })
     .filter(e=>{
-      if(filterTeacher&&String(e.teacher_id)!==String(filterTeacher)) return false;
+      if(filterTeacher&&e.teacher_id&&String(e.teacher_id)!==String(filterTeacher)) return false;
       if(filterRoom&&String(e.room_id)!==String(filterRoom)) return false;
+      if(searchQuery){
+        const q=searchQuery.toLowerCase();
+        const matchSubject = (e.subject_name||e.short_name||'').toLowerCase().includes(q);
+        const matchTeacher = !(e.teacher_name) || (e.teacher_name||'').toLowerCase().includes(q);
+        const matchRoom    = (e.room_code||'').toLowerCase().includes(q);
+        const matchDay     = (e.day||'').toLowerCase().includes(q);
+        if(!matchSubject&&!matchTeacher&&!matchRoom&&!matchDay) return false;
+      }
       return true;
     });
 
   const handleAdd=async form=>{
-    if(!form.batch_id||!form.subject_id||!form.teacher_id||!form.day||!form.time_slot){ showToast('Please fill all fields','error'); return; }
+    if(!form.batch_id||!form.subject_id||!form.day||!form.time_slot){ showToast('Please fill all fields','error'); return; }
     if(!form.room_id){ showToast('No room assigned. Set a default room for this batch in Batch Management first.','error'); return; }
     setAddLoading(true); setConflicts([]);
     try{
@@ -535,7 +582,8 @@ export default function TimetablePage({ canEdit=false }) {
       const newSem   = parseInt(form.semester)||1;
       setSelBatch(newBatch);
       setSelSemester(newSem);
-      const r = await api.get('/timetable', { params: { batch_id: newBatch, semester: newSem } });
+      // Reload ALL entries for this batch — let grid show everything
+      const r = await api.get('/timetable', { params: { batch_id: newBatch } });
       setEntries(r.data);
       setPendingMoves([]);
     }
@@ -555,6 +603,7 @@ export default function TimetablePage({ canEdit=false }) {
     }catch(_){ showToast('Could not check conflicts','error'); }
   };
 
+  // Save teacher/room changes from popup
   const handleSaveCard=async(id,{teacher_id,room_id})=>{
     try{
       const entry=entries.find(e=>e.id===id);
@@ -562,7 +611,7 @@ export default function TimetablePage({ canEdit=false }) {
         batch_id:entry.batch_id, subject_id:entry.subject_id,
         teacher_id, room_id,
         day:entry.day, time_slot:entry.time_slot, is_lab:entry.is_lab,
-        semester:entry.semester||selSemester
+        semester:selSemester
       });
       showToast('Class updated'); loadEntries();
     }catch(err){ showToast(err.response?.data?.message||'Error saving','error'); }
@@ -574,7 +623,7 @@ export default function TimetablePage({ canEdit=false }) {
     let saved=0,failed=0;
     for(const{entry,newDay,newSlot}of pendingMoves){
       try{
-        await api.put(`/timetable/${entry.id}`,{batch_id:entry.batch_id,subject_id:entry.subject_id,teacher_id:entry.teacher_id,room_id:entry.room_id,day:newDay,time_slot:newSlot,is_lab:entry.is_lab,semester:entry.semester||selSemester});
+        await api.put(`/timetable/${entry.id}`,{batch_id:entry.batch_id,subject_id:entry.subject_id,teacher_id:entry.teacher_id,room_id:entry.room_id,day:newDay,time_slot:newSlot,is_lab:entry.is_lab,semester:selSemester});
         saved++;
       }catch(err){ failed++; const e=err.response?.data?.conflicts; if(e?.length) setConflicts(c=>[...c,...e]); }
     }
@@ -587,8 +636,6 @@ export default function TimetablePage({ canEdit=false }) {
   const handleDelete=async id=>{ setPendingMoves(p=>p.filter(m=>m.entry.id!==id)); try{ await api.delete(`/timetable/${id}`); showToast('Class removed'); loadEntries(); }catch{ showToast('Failed to remove','error'); } };
 
   const toastBg={success:'#16a34a',error:'#dc2626',info:'#2d4a5a'}[toast.type]||'#16a34a';
-
-  const hasActiveFilters = filterTeacher || filterRoom;
 
   return (
     <div className="page-content">
@@ -613,7 +660,7 @@ export default function TimetablePage({ canEdit=false }) {
               <div style={{ flex:1,height:'1px',background:'#e0e8ed',marginLeft:'4px' }}/>
               {selBatch&&selBatchObj&&(
                 <span style={{ fontSize:'11px',color:'#7a9aaa',background:'#f0f4f7',padding:'3px 10px',borderRadius:'10px' }}>
-                  {selBatchObj.batch_name}{selSemester ? ` · Session ${selSemester}` : ' · All Sessions'} · {entries.length} class{entries.length!==1?'es':''}
+                  {selBatchObj.batch_name}{selSemester ? ` · Session ${selSemester}` : ''} · {entries.length} class{entries.length!==1?'es':''}
                 </span>
               )}
             </div>
@@ -624,7 +671,7 @@ export default function TimetablePage({ canEdit=false }) {
                 <span style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px' }}>Batch</span>
                 <SearchableSelect label="Batch" placeholder="All Batches"
                   value={selBatch||''}
-                  onChange={v=>{ if(pendingMoves.length&&!window.confirm('Switch batch? Unsaved changes will be lost.')) return; setSelBatch(parseInt(v)||null); setSelSemester(null); }}
+                  onChange={v=>{ if(pendingMoves.length&&!window.confirm('Switch batch? Unsaved changes will be lost.')) return; setSelBatch(parseInt(v)||null); setSelSemester(1); setSearchQuery(''); }}
                   options={batches.map(b=>({ value:b.id, label:b.batch_name }))}/>
               </div>
               <div style={{ display:'flex',flexDirection:'column',gap:'4px' }}>
@@ -648,12 +695,12 @@ export default function TimetablePage({ canEdit=false }) {
                   onChange={v=>setFilterRoom(v)}
                   options={rooms.map(r=>({ value:r.id, label:`${r.room_id} (Cap: ${r.capacity})` }))}/>
               </div>
-              {hasActiveFilters&&(
+              {(filterTeacher||filterRoom||searchQuery)&&(
                 <div style={{ display:'flex',flexDirection:'column',gap:'4px' }}>
                   <span style={{ fontSize:'10px',color:'transparent' }}>_</span>
-                  <button onClick={()=>{ setFilterTeacher(''); setFilterRoom(''); }}
+                  <button onClick={()=>{ setFilterTeacher(''); setFilterRoom(''); setSearchQuery(''); }}
                     style={{ padding:'7px 14px',border:'1px solid #fca5a5',borderRadius:'7px',fontSize:'11px',fontWeight:'600',cursor:'pointer',background:'#fef2f2',color:'#dc2626',fontFamily:'inherit' }}>
-                    Clear Filters
+                    Clear All
                   </button>
                 </div>
               )}
@@ -665,7 +712,7 @@ export default function TimetablePage({ canEdit=false }) {
             <ConflictAlert conflicts={conflicts} onClose={()=>setConflicts([])}/>
 
             {canEdit&&(
-              <AddClassForm rooms={rooms} selectedBatch={selBatch} semester={selSemester||1} batches={batches} onAdd={handleAdd} loading={addLoading}/>
+              <AddClassForm rooms={rooms} selectedBatch={selBatch} semester={selSemester} batches={batches} onAdd={handleAdd} loading={addLoading}/>
             )}
 
             {displayEntries.length===0?(

@@ -424,7 +424,7 @@ function AllBatchesPage() {
   const { isMobile } = useResponsive();
   const [batches,     setBatches]     = useState([]);
   const [selBatch,    setSelBatch]    = useState('');
-  const [selSemester, setSelSemester] = useState(1);
+  const [selSemester, setSelSemester] = useState(null);
   const [entries,     setEntries]     = useState([]);
   const [loading,     setLoading]     = useState(false);
 

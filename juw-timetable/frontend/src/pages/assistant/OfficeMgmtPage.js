@@ -504,59 +504,84 @@ function TeacherTab() {
 }
 
 // ── COURSE TAB ────────────────────────────────────────────────────────────
+// ── COURSE TAB ────────────────────────────────────────────────────────────
 function CourseTab() {
   const { isMobile } = useResponsive();
   const [subjects,    setSubjects]  = useState([]);
   const [teachers,    setTeachers]  = useState([]);
   const [selTeachers, setSelTeach]  = useState([]);
-  const [form, setForm] = useState({ code:'',name:'',short_name:'',credit_hours:3,has_lab:false });
+  const [form, setForm] = useState({ code:'',name:'',short_name:'',credit_hours:3,credit_format:'3+0',has_lab:false });
   const [m, setM]       = useState(null);
   const [search, setSearch] = useState('');
   const [editCourse,    setEditCourse]   = useState(null);
   const [editForm,      setEditForm]     = useState({});
   const [editTeachers,  setEditTeachers] = useState([]);
   const [editSelT,      setEditSelT]     = useState([]);
-
+ 
   const loadData = () => {
     api.get('/office/subjects').then(r=>setSubjects(r.data));
     api.get('/office/teachers').then(r=>setTeachers(r.data));
   };
   useEffect(()=>{ loadData(); },[]);
-
+ 
   const toggle = id => setSelTeach(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
   const isFYP = f => /fyp|final.year.project/i.test(f.name+' '+f.code);
-
+ 
+  // Credit format options
+  const CREDIT_FORMATS = [
+    { value:'3+1', label:'3+1  —  3 theory + 1 lab (3 hrs)', theory:3, lab:1, has_lab:true  },
+    { value:'3+0', label:'3+0  —  3 theory only',             theory:3, lab:0, has_lab:false },
+    { value:'2+1', label:'2+1  —  2 theory + 1 lab (3 hrs)', theory:2, lab:1, has_lab:true  },
+    { value:'2+0', label:'2+0  —  2 theory only',             theory:2, lab:0, has_lab:false },
+    { value:'0+3', label:'0+3  —  FYP / Lab only (3 hrs)',    theory:0, lab:3, has_lab:true  },
+  ];
+  const getCreditFormat = fmt => CREDIT_FORMATS.find(c=>c.value===fmt) || CREDIT_FORMATS[0];
+  const applyFormat = (fmt, setter) => {
+    const f = getCreditFormat(fmt);
+    setter(prev => ({ ...prev, credit_format:fmt, credit_hours: f.theory + f.lab, has_lab: f.has_lab }));
+  };
+ 
   const handleSubmit = async e => {
     e.preventDefault();
     if(selTeachers.length===0 && !isFYP(form)){ setM({ok:false,text:'Please assign at least one teacher to this course.'}); return; }
     try{
-      const r=await api.post('/office/subjects',form);
+      const fmt = getCreditFormat(form.credit_format||'3+0');
+      const r=await api.post('/office/subjects',{ ...form, credit_format:form.credit_format, credit_hours:fmt.theory+fmt.lab, has_lab:fmt.has_lab });
       for(const tid of selTeachers){
         try{ await api.post('/assignments/teacher-subjects',{teacher_id:tid,subject_id:r.data.id}); }catch(_){}
       }
       loadData();
       const teacherMsg = selTeachers.length>0 ? `with ${selTeachers.length} teacher(s)` : '(no supervisor assigned — each group has their own)';
       setM({ok:true,text:`Course added ${teacherMsg}.`});
-      setForm({code:'',name:'',short_name:'',credit_hours:3,has_lab:false}); setSelTeach([]);
+      setForm({code:'',name:'',short_name:'',credit_hours:3,credit_format:'3+0',has_lab:false}); setSelTeach([]);
     }catch(err){ setM({ok:false,text:err.response?.data?.message||'Error'}); }
     setTimeout(()=>setM(null),3500);
   };
-
+ 
   const openEdit = async s => {
     setEditCourse(s);
-    setEditForm({ code:s.code, name:s.name, short_name:s.short_name, credit_hours:s.credit_hours, has_lab:s.has_lab });
+    // Derive credit_format from existing data
+    const fmt = s.credit_format || (
+      s.has_lab && s.credit_hours === 3 ? '3+1' :
+      !s.has_lab && s.credit_hours === 3 ? '3+0' :
+      s.has_lab && s.credit_hours === 2 ? '2+1' :
+      !s.has_lab && s.credit_hours === 2 ? '2+0' :
+      s.has_lab && s.credit_hours === 0 ? '0+3' : '3+0'
+    );
+    setEditForm({ code:s.code, name:s.name, short_name:s.short_name, credit_hours:s.credit_hours, credit_format:fmt, has_lab:s.has_lab });
     try{
       const r=await api.get('/assignments/teacher-subjects',{params:{subject_id:s.id}});
       setEditTeachers(r.data);
       setEditSelT(r.data.map(x=>x.teacher_id));
     }catch(_){ setEditTeachers([]); setEditSelT([]); }
   };
-
+ 
   const handleEditSave = async () => {
     const isFYPCourse = /fyp|final.year.project/i.test((editForm.name||editCourse.name)+' '+(editForm.code||editCourse.code));
     if(editSelT.length===0 && !isFYPCourse){ setM({ok:false,text:'Please assign at least one teacher to this course.'}); setTimeout(()=>setM(null),3500); return; }
     try{
-      await api.put(`/office/subjects/${editCourse.id}`,{ ...editForm, code:editForm.code||editCourse.code });
+      const fmt = getCreditFormat(editForm.credit_format||'3+0');
+      await api.put(`/office/subjects/${editCourse.id}`,{ ...editForm, code:editForm.code||editCourse.code, credit_format:editForm.credit_format, credit_hours:fmt.theory+fmt.lab, has_lab:fmt.has_lab });
       const current = editTeachers.map(t=>t.teacher_id);
       const toAdd   = editSelT.filter(id=>!current.includes(id));
       const toRemove= editTeachers.filter(t=>!editSelT.includes(t.teacher_id));
@@ -568,17 +593,17 @@ function CourseTab() {
     }catch(err){ setM({ok:false,text:err.response?.data?.message||'Error saving.'}); }
     setTimeout(()=>setM(null),3500);
   };
-
+ 
   const filtered = subjects.filter(s=>
     s.name?.toLowerCase().includes(search.toLowerCase()) ||
     s.code?.toLowerCase().includes(search.toLowerCase()) ||
     s.short_name?.toLowerCase().includes(search.toLowerCase())
   );
-
+ 
   return (
     <div>
       {m&&<div style={msg(m.ok)}>{m.ok?<Check size={13}/>:<X size={13}/>} {m.text}</div>}
-
+ 
       {editCourse&&(
         <div style={{ ...card,border:'2px solid #2d4a5a',marginBottom:'20px' }}>
           <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px' }}>
@@ -589,16 +614,25 @@ function CourseTab() {
               <X size={12}/> Cancel
             </button>
           </div>
-          <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 2fr 1fr 1fr',gap:'12px',marginBottom:'12px' }}>
+          <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 2fr 1fr',gap:'12px',marginBottom:'12px' }}>
             <div><label style={fl}>Code</label><input style={fi} value={editForm.code||editCourse.code} onChange={e=>setEditForm(f=>({...f,code:e.target.value}))}/></div>
             <div><label style={fl}>Course Name</label><input style={fi} value={editForm.name} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))}/></div>
             <div><label style={fl}>Short Name</label><input style={fi} value={editForm.short_name} onChange={e=>setEditForm(f=>({...f,short_name:e.target.value}))}/></div>
-            <div><label style={fl}>Credit Hours</label><input style={fi} type="number" min="1" max="6" value={editForm.credit_hours} onChange={e=>setEditForm(f=>({...f,credit_hours:parseInt(e.target.value)}))}/></div>
           </div>
-          <label style={{ display:'flex',alignItems:'center',gap:'8px',fontSize:'12px',color:'#1a2e3a',fontWeight:'500',marginBottom:'16px',cursor:'pointer' }}>
-            <input type="checkbox" checked={editForm.has_lab} onChange={e=>setEditForm(f=>({...f,has_lab:e.target.checked}))} style={{ width:'14px',height:'14px',accentColor:'#2d4a5a',cursor:'pointer' }}/>
-            This course includes a Lab session (3-hour slot)
-          </label>
+          <div style={{ marginBottom:'14px' }}>
+            <label style={fl}>Credit Hour Format *</label>
+            <select style={fi} value={editForm.credit_format||'3+0'} onChange={e=>applyFormat(e.target.value, setEditForm)}>
+              {CREDIT_FORMATS.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+            {(()=>{ const f=getCreditFormat(editForm.credit_format||'3+0'); return (
+              <div style={{ marginTop:'8px',padding:'8px 12px',background:'#f8fafc',border:'1px solid #e0e8ed',borderRadius:'7px',display:'flex',flexWrap:'wrap',gap:'12px',fontSize:'12px',color:'#5a7080' }}>
+                <span>Theory classes: <strong style={{ color:'#1a2e3a' }}>{f.theory} per week</strong></span>
+                {f.has_lab && <span>Lab sessions: <strong style={{ color:'#1a2e3a' }}>{f.lab} × 3 hrs</strong></span>}
+                {!f.has_lab && <span style={{ color:'#aabbc8' }}>No lab</span>}
+                {f.value==='0+3' && <span style={{ background:'#fef3c7',color:'#92400e',borderRadius:'4px',padding:'1px 7px',fontSize:'10px',fontWeight:'700' }}>FYP — lab only</span>}
+              </div>
+            ); })()}
+          </div>
           {(()=>{ const isFYPCourse=/fyp|final.year.project/i.test((editForm.name||editCourse.name)+' '+(editForm.code||editCourse.code)); return (
             <div style={{ border:`2px solid ${isFYPCourse?'#fde68a':'#dde3e8'}`,borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
               {isFYPCourse?(
@@ -624,21 +658,30 @@ function CourseTab() {
           </div>
         </div>
       )}
-
+ 
       {!editCourse&&(
         <div style={card}>
           <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Course</div>
           <form onSubmit={handleSubmit}>
-            <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 2fr 1fr 1fr',gap:'12px',marginBottom:'12px' }}>
+            <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 2fr 1fr',gap:'12px',marginBottom:'12px' }}>
               <div><label style={fl}>Code *</label><input style={fi} placeholder="OOP" value={form.code} onChange={e=>setForm(f=>({...f,code:e.target.value}))} required/></div>
               <div><label style={fl}>Course Name *</label><input style={fi} placeholder="Object Oriented Programming" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} required/></div>
               <div><label style={fl}>Short Name</label><input style={fi} placeholder="OOP" value={form.short_name} onChange={e=>setForm(f=>({...f,short_name:e.target.value}))}/></div>
-              <div><label style={fl}>Credit Hours</label><input style={fi} type="number" min="1" max="6" value={form.credit_hours} onChange={e=>setForm(f=>({...f,credit_hours:parseInt(e.target.value)}))}/></div>
             </div>
-            <label style={{ display:'flex',alignItems:'center',gap:'8px',fontSize:'12px',color:'#1a2e3a',fontWeight:'500',marginBottom:'16px',cursor:'pointer' }}>
-              <input type="checkbox" checked={form.has_lab} onChange={e=>setForm(f=>({...f,has_lab:e.target.checked}))} style={{ width:'14px',height:'14px',accentColor:'#2d4a5a',cursor:'pointer' }}/>
-              This course includes a Lab session (3-hour slot)
-            </label>
+            <div style={{ marginBottom:'14px' }}>
+              <label style={fl}>Credit Hour Format *</label>
+              <select style={fi} value={form.credit_format||'3+0'} onChange={e=>applyFormat(e.target.value, setForm)} required>
+                {CREDIT_FORMATS.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+              {(()=>{ const f=getCreditFormat(form.credit_format||'3+0'); return (
+                <div style={{ marginTop:'8px',padding:'8px 12px',background:'#f8fafc',border:'1px solid #e0e8ed',borderRadius:'7px',display:'flex',flexWrap:'wrap',gap:'12px',fontSize:'12px',color:'#5a7080' }}>
+                  <span>Theory classes: <strong style={{ color:'#1a2e3a' }}>{f.theory} per week</strong></span>
+                  {f.has_lab && <span>Lab sessions: <strong style={{ color:'#1a2e3a' }}>{f.lab} × 3 hrs</strong></span>}
+                  {!f.has_lab && <span style={{ color:'#aabbc8' }}>No lab</span>}
+                  {f.value==='0+3' && <span style={{ background:'#fef3c7',color:'#92400e',borderRadius:'4px',padding:'1px 7px',fontSize:'10px',fontWeight:'700' }}>FYP — lab only</span>}
+                </div>
+              ); })()}
+            </div>
             <div style={{ border:`2px solid ${isFYP(form)?'#fde68a':'#dde3e8'}`,borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
               {isFYP(form)?(
                 <div style={{ marginBottom:'10px' }}>
@@ -660,13 +703,13 @@ function CourseTab() {
           </form>
         </div>
       )}
-
+ 
       <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px' }}><BookOpen size={14}/> Course Directory <span style={{ fontSize:'11px',color:'#7a9aaa',fontWeight:'400' }}>— click Edit to manage teachers</span></div>
       <SearchBar value={search} onChange={setSearch} placeholder="Search by name, code or short name..."/>
       <div style={{ borderRadius:'10px',overflow:'hidden',border:'1px solid #e0e8ed' }}>
         <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
           <thead><tr style={{ background:'#2d4a5a',color:'white' }}>
-            {['Code','Course Name','Short Name','Credits','Lab','Action'].map(h=>(
+            {['Code','Course Name','Short Name','Credit Hours','Lab','Action'].map(h=>(
               <th key={h} style={{ padding:'10px 14px',textAlign:'left',fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px' }}>{h}</th>
             ))}
           </tr></thead>
@@ -676,7 +719,14 @@ function CourseTab() {
                 <td style={{ padding:'10px 14px' }}><strong style={{ fontFamily:'monospace',color:'#2d4a5a' }}>{s.code}</strong></td>
                 <td style={{ padding:'10px 14px',fontWeight:'600',color:'#1a2e3a' }}>{s.name}</td>
                 <td style={{ padding:'10px 14px' }}><span style={{ background:'#e8f4fd',color:'#1a5a7a',border:'1px solid #b8d9f5',borderRadius:'10px',padding:'2px 9px',fontSize:'10px',fontWeight:'600' }}>{s.short_name}</span></td>
-                <td style={{ padding:'10px 14px',textAlign:'center',color:'#5a7080' }}>{s.credit_hours}</td>
+                <td style={{ padding:'10px 14px' }}>
+                  <span style={{ fontFamily:'monospace',fontWeight:'700',color:'#2d4a5a',fontSize:'13px' }}>
+                    {s.credit_format || (s.has_lab ? (s.credit_hours===3?'3+1':'2+1') : (s.credit_hours===3?'3+0':'2+0'))}
+                  </span>
+                  <span style={{ fontSize:'10px',color:'#7a9aaa',marginLeft:'6px' }}>
+                    {(()=>{ const f=getCreditFormat(s.credit_format||(s.has_lab?(s.credit_hours===3?'3+1':'2+1'):(s.credit_hours===3?'3+0':'2+0'))); return `${f.theory}T${f.has_lab?` + ${f.lab}L`:''}` })()}
+                  </span>
+                </td>
                 <td style={{ padding:'10px 14px',textAlign:'center' }}>{s.has_lab?<Check size={14} color="#16a34a"/>:<X size={14} color="#aabbc8"/>}</td>
                 <td style={{ padding:'10px 14px' }}>
                   <button onClick={()=>openEdit(s)} style={{ background:editCourse?.id===s.id?'#2d4a5a':'transparent',color:editCourse?.id===s.id?'white':'#2d4a5a',border:'1px solid #2d4a5a',padding:'5px 14px',borderRadius:'6px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'5px' }}>

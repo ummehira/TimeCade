@@ -202,7 +202,8 @@ router.get('/batch-courses', authenticate, async (req, res) => {
     if (!batch_id) return res.status(400).json({ message: 'batch_id is required.' });
 
     const r = await pool.query(
-      `SELECT s.id, s.name, s.short_name, s.credit_hours, s.has_lab,
+      `SELECT s.id, s.name, s.short_name, s.code, s.credit_hours, s.has_lab,
+              COALESCE(s.credit_format, CASE WHEN s.has_lab AND s.credit_hours>=3 THEN '3+1' WHEN s.has_lab AND s.credit_hours=2 THEN '2+1' WHEN s.has_lab AND s.credit_hours=0 THEN '0+3' WHEN NOT s.has_lab AND s.credit_hours=2 THEN '2+0' ELSE '3+0' END) AS credit_format,
               ARRAY(
                 SELECT json_build_object('id', t.id, 'full_name', t.full_name)
                 FROM teacher_subjects ts

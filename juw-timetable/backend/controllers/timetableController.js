@@ -56,11 +56,12 @@ const getTimetable = async (req, res) => {
     } else {
       if (batch_id)   { params.push(batch_id);   where += ` AND t.batch_id=$${params.length}`; }
       if (teacher_id) { params.push(teacher_id); where += ` AND t.teacher_id=$${params.length}`; }
-      if (semester)   { params.push(parseInt(semester)); where += ` AND (t.semester=$${params.length} OR t.semester IS NULL)`; }
+      // Show all classes for the batch regardless of session filter
+      // Session/semester is informational only in the timetable view
     }
 
     const result = await pool.query(
-      `SELECT t.id, t.day, t.time_slot, t.is_lab,
+      `SELECT t.id, t.day, t.time_slot, t.is_lab, t.semester,
               CASE WHEN t.is_lab THEN
                 CASE t.time_slot
                   WHEN 1 THEN '9:00 - 12:00 (Lab)'
@@ -88,7 +89,7 @@ const getTimetable = async (req, res) => {
        FROM timetable t
        JOIN batches  b  ON t.batch_id   = b.id
        JOIN subjects s  ON t.subject_id = s.id
-       JOIN teachers te ON t.teacher_id = te.id
+       LEFT JOIN teachers te ON t.teacher_id = te.id
        LEFT JOIN rooms    r  ON t.room_id    = r.id
        ${where}
        ORDER BY CASE t.day
@@ -258,7 +259,7 @@ const teacherRescheduleRequest = async (req, res) => {
        FROM timetable t
        JOIN batches b  ON t.batch_id   = b.id
        JOIN subjects s ON t.subject_id = s.id
-       JOIN teachers te ON t.teacher_id = te.id
+       LEFT JOIN teachers te ON t.teacher_id = te.id
        LEFT JOIN rooms r    ON t.room_id    = r.id
        WHERE t.id = $1`, [timetable_id]
     );

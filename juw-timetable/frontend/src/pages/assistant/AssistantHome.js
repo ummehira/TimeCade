@@ -55,11 +55,11 @@ export default function AssistantHome() {
     { label:'Total batches',    value: stats.totalBatches,  bg:'#2d4a5a' },
     { label:'Teachers',         value: stats.totalTeachers, bg:'#3a6070' },
     { label:'Classrooms',       value: stats.totalRooms,    bg:'#1a7a8a' },
-    { label:'Scheduled classes',value: stats.totalClasses,  bg: pending.length > 0 ? '#854f0b' : '#2d6070' },
+    { label:'Scheduled classes',value: stats.totalClasses,  bg: pending.length > 0 ? '#2E6478' : '#2d6070' },
   ];
 
   return (
-    <div className="page-content" style={{ padding: isMobile ? '12px' : '20px' }}>
+    <div className="page-content" style={{ padding: isMobile ? '12px' : '20px', maxWidth:'100%' }}>
 
       {/* ── Welcome banner ── */}
       <div style={{ background:'#2d4a5a', borderRadius:'12px', padding: isMobile ? '14px 16px' : '18px 24px', marginBottom:'14px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px', flexWrap:'wrap' }}>
