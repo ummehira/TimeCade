@@ -5,6 +5,7 @@ import { LayoutDashboard, Calendar, BookOpen, LogOut, Clock, Users, Settings } f
 import ProfileModal from '../../components/common/ProfileModal';
 import { useResponsive } from '../../hooks/useResponsive';
 import { useAuth } from '../../context/AuthContext';
+import NotificationBell from '../../components/common/NotificationBell';
 import api from '../../utils/api';
 
 const DAYS  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -91,6 +92,7 @@ function StudentHeader({ title, icon: Icon }) {
           <div style={{ fontSize:'13px',fontWeight:'600',color:'#1a2e3a' }}>{firstName}</div>
           <div style={{ fontSize:'10px',color:'#8fa5b0',textTransform:'uppercase',letterSpacing:'0.6px' }}>STUDENT</div>
         </div>
+        <NotificationBell dark={false}/>
         <div style={{ width:'36px',height:'36px',borderRadius:'50%',background:'#2d4a5a',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:'700',fontSize:'13px' }}>{initials}</div>
       </div>
     </header>

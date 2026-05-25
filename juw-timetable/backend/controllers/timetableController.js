@@ -184,7 +184,8 @@ const createEntry = async (req, res) => {
       entry: {
         batch_id:     created.batch_id,
         teacher_id:   created.teacher_id,
-        subject_name: subjectRes.rows[0]?.name || subject_id,
+        subject_id:   created.subject_id,
+        subject_name: subjectRes.rows[0]?.name,
         day:          created.day,
         slot_label:   created.slot_label,
         room_code:    null,
@@ -267,15 +268,9 @@ const teacherRescheduleRequest = async (req, res) => {
       return res.status(404).json({ message: 'Timetable entry not found.' });
 
     const entry = entryRes.rows[0];
-    const { detectConflicts }        = require('../services/conflictService');
-const { notifyTimetableChange }  = require('../services/notificationService');
-    const conflicts = await detectConflicts({
-      batch_id: entry.batch_id, teacher_id: entry.teacher_id,
-      room_id: entry.room_id, day: new_day,
-      time_slot: parseInt(new_time_slot), exclude_id: timetable_id
-    });
-    if (conflicts.length)
-      return res.status(409).json({ message: 'Conflict detected', conflicts });
+    // No hard conflict block for teacher reschedule requests —
+    // the office assistant reviews the request and resolves conflicts manually.
+    // We still check and attach conflict info for the assistant's awareness.
 
     const newSlotLabel = getSlotLabel(parseInt(new_time_slot), entry.is_lab);
     const oldSlotLabel = getSlotLabel(entry.time_slot, entry.is_lab);

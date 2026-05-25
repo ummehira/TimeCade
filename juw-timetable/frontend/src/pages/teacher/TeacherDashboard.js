@@ -20,7 +20,7 @@ const SLOTS = [
 ];
 
 const cellStyle = () => ({
-  background: '#2d4a5a',
+  background: '#3a6070',
   borderRadius:'5px', padding:'5px 7px', color:'white',
   fontSize:'10px', lineHeight:'1.3', height:'100%', boxSizing:'border-box'
 });
@@ -87,6 +87,7 @@ function TeacherSidebar() {
               <div style={{ color:'white',fontSize:'11px',fontWeight:'600',lineHeight:1.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{user?.full_name?.split(' ').slice(0,3).join(' ')}</div>
               <div style={{ color:'rgba(255,255,255,0.45)',fontSize:'9px',marginTop:'2px' }}>Teacher</div>
             </div>
+            <NotificationBell dark={true}/>
             <button onClick={()=>setShowProfile(true)} title="Profile Settings"
               style={{ background:'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.2)',color:'white',borderRadius:'6px',width:'28px',height:'28px',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0 }}>
               <Settings size={13}/>
@@ -424,7 +425,7 @@ function AllBatchesPage() {
   const { isMobile } = useResponsive();
   const [batches,     setBatches]     = useState([]);
   const [selBatch,    setSelBatch]    = useState('');
-  const [selSemester, setSelSemester] = useState(null);
+  const [selSemester, setSelSemester] = useState(1);
   const [entries,     setEntries]     = useState([]);
   const [loading,     setLoading]     = useState(false);
 

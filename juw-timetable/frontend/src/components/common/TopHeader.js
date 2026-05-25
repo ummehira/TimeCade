@@ -15,7 +15,7 @@ export default function TopHeader({ title, icon: Icon, onMenuClick }) {
 
   const initials    = user?.full_name?.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase() || 'U';
   const displayName = user?.full_name?.split(' ').slice(0,2).join(' ');
-  const showBell    = user?.role === 'teacher' || user?.role === 'student';
+  const showBell    = true; // show for all roles
 
   return (
     <header style={{
@@ -44,7 +44,7 @@ export default function TopHeader({ title, icon: Icon, onMenuClick }) {
       </div>
 
       <div style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
-        {showBell && <NotificationBell/>}
+        {showBell && <NotificationBell dark={false}/>}
         <div style={{ textAlign:'right', display:'none' }} className="hide-mobile">
           <div style={{ fontSize:'13px', fontWeight:'600', color:'#1a2e3a' }}>{displayName}</div>
           <div style={{ fontSize:'10px', color:'#8fa5b0', textTransform:'uppercase', letterSpacing:'0.6px' }}>{ROLE_LABELS[user?.role]}</div>

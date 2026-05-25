@@ -1,9 +1,6 @@
 // backend/services/notificationService.js
 const pool = require('../config/db');
 
-/**
- * Send a notification to one or more users
- */
 async function sendNotification({ user_id, user_ids, actor_id, type, title, message }) {
   const ids = user_ids || (user_id ? [user_id] : []);
   if (!ids.length) return;
@@ -20,28 +17,43 @@ async function sendNotification({ user_id, user_ids, actor_id, type, title, mess
   }
 }
 
-/**
- * Notify all teachers + students affected by a timetable entry change
- * action: 'added' | 'updated' | 'removed' | 'rescheduled'
- */
 async function notifyTimetableChange({ actor_id, entry, action }) {
   try {
-    const { batch_id, teacher_id, subject_name, day, slot_label, room_code } = entry;
-    const subj  = subject_name || 'a class';
-    const time  = slot_label   || '';
-    const room  = room_code    ? ` in ${room_code}` : '';
+    let { batch_id, teacher_id, subject_id, subject_name, day, slot_label, room_code } = entry;
+
+    // Always resolve subject name from DB — don't trust passed-in value
+    if (subject_id && (!subject_name || /^\d+$/.test(String(subject_name)))) {
+      try {
+        const sr = await pool.query('SELECT name FROM subjects WHERE id=$1', [subject_id]);
+        subject_name = sr.rows[0]?.name || subject_name;
+      } catch(_) {}
+    }
+
+    // Resolve batch name for richer messages
+    let batch_name = '';
+    if (batch_id) {
+      try {
+        const br = await pool.query('SELECT batch_name FROM batches WHERE id=$1', [batch_id]);
+        batch_name = br.rows[0]?.batch_name || '';
+      } catch(_) {}
+    }
+
+    const subj = subject_name && !/^\d+$/.test(String(subject_name)) ? subject_name : 'a class';
+    const time = slot_label || '';
+    const room = room_code  ? ` in ${room_code}` : '';
+    const batch = batch_name ? ` (${batch_name})` : '';
 
     const titles = {
-      added:       `New class scheduled: ${subj}`,
+      added:       `New class: ${subj}`,
       updated:     `Class updated: ${subj}`,
       removed:     `Class removed: ${subj}`,
       rescheduled: `Class rescheduled: ${subj}`,
     };
     const messages = {
-      added:       `${subj} has been added on ${day} at ${time}${room}.`,
-      updated:     `${subj} on ${day} has been updated (${time}${room}).`,
-      removed:     `${subj} scheduled on ${day} at ${time} has been removed from the timetable.`,
-      rescheduled: `${subj} has been rescheduled to ${day} at ${time}${room}.`,
+      added:       `${subj}${batch} has been added on ${day} at ${time}${room}.`,
+      updated:     `${subj}${batch} on ${day} has been updated (${time}${room}).`,
+      removed:     `${subj}${batch} scheduled on ${day} at ${time} has been removed.`,
+      rescheduled: `${subj}${batch} has been rescheduled to ${day} at ${time}${room}.`,
     };
 
     const title   = titles[action]   || `Timetable updated: ${subj}`;
@@ -51,9 +63,7 @@ async function notifyTimetableChange({ actor_id, entry, action }) {
 
     // Notify the teacher
     if (teacher_id) {
-      const tRes = await pool.query(
-        'SELECT user_id FROM teachers WHERE id=$1', [teacher_id]
-      );
+      const tRes = await pool.query('SELECT user_id FROM teachers WHERE id=$1', [teacher_id]);
       if (tRes.rows[0]?.user_id) userIds.push(tRes.rows[0].user_id);
     }
 
@@ -65,11 +75,9 @@ async function notifyTimetableChange({ actor_id, entry, action }) {
       sRes.rows.forEach(r => { if (r.user_id) userIds.push(r.user_id); });
     }
 
-    // Remove actor from recipients (don't notify yourself)
     const recipients = [...new Set(userIds)].filter(id => id !== actor_id);
     await sendNotification({ user_ids: recipients, actor_id, type: `timetable_${action}`, title, message });
-
-    console.log(`[notify] ${action} → ${recipients.length} recipients`);
+    console.log(`[notify] ${action} (${subj}) → ${recipients.length} recipients`);
   } catch (err) {
     console.error('notifyTimetableChange error:', err.message);
   }
