@@ -1,6 +1,6 @@
 // frontend/src/pages/assistant/AssistantDashboard.js
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, NavLink, useNavigate } from 'react-router-dom';
+import { Routes, Route, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Calendar, Building2, LogOut, Settings } from 'lucide-react';
 import { useResponsive } from '../../hooks/useResponsive';
 import { useAuth } from '../../context/AuthContext';
@@ -21,6 +21,8 @@ const NAV = [
 export default function AssistantDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const officeTab = new URLSearchParams(location.search).get('tab') || undefined;
   const [pendingCount, setPendingCount] = useState(0);
   const [showProfile, setShowProfile]   = useState(false);
   const [sidebarOpen, setSidebarOpen]   = useState(false);
@@ -129,7 +131,7 @@ export default function AssistantDashboard() {
         <Routes>
           <Route index            element={<><TopHeader title="Dashboard"         icon={LayoutDashboard} onMenuClick={isMobile ? () => setSidebarOpen(o => !o) : null}/><AssistantHome/></>}/>
           <Route path="timetable" element={<><TopHeader title="Timetable"         icon={Calendar}        onMenuClick={isMobile ? () => setSidebarOpen(o => !o) : null}/><TimetablePage canEdit={true}/></>}/>
-          <Route path="office/*"  element={<><TopHeader title="Resource Management" icon={Building2}       onMenuClick={isMobile ? () => setSidebarOpen(o => !o) : null}/><OfficeMgmtPage/></>}/>
+          <Route path="office/*"  element={<><TopHeader title="Resource Management" icon={Building2}       onMenuClick={isMobile ? () => setSidebarOpen(o => !o) : null}/><OfficeMgmtPage tab={officeTab}/></>}/>
         </Routes>
       </div>
     </div>

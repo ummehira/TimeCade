@@ -114,7 +114,7 @@ export default function AssistantHome() {
             ),
             iconBg: '#e8f0fa',
             border: '0.5px solid #d8e4f0',
-            onClick: () => navigate('/assistant/office'),
+            onClick: () => navigate('/assistant/timetable'),
           },
           {
             label: 'Approvals',
@@ -127,7 +127,7 @@ export default function AssistantHome() {
             ),
             iconBg: pending.length > 0 ? '#fef9ee' : '#e8f0fa',
             border: pending.length > 0 ? '0.5px solid #fbbf24' : '0.5px solid #d8e4f0',
-            onClick: () => navigate('/assistant/office'),
+            onClick: () => navigate('/assistant/office?tab=approvals'),
           },
           {
             label: 'Timetable',
@@ -155,7 +155,7 @@ export default function AssistantHome() {
             onClick: () => navigate('/assistant/timetable'),
           },
           {
-            label: 'Office Management',
+            label: 'Resource Management',
             sub: 'Rooms, batches, teachers',
             icon: (
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
