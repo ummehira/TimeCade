@@ -389,8 +389,7 @@ export default function LandingPage() {
         .feat-icon-wrap { transition: background 0.22s ease, transform 0.22s ease !important; }
         .feat-card:hover .feat-icon-wrap { background: #2d4a5a !important; transform: scale(1.08) !important; }
         .feat-card:hover .feat-icon-wrap svg { stroke: white !important; }
-        .feat-arrow { transition: transform 0.2s ease; }
-        .feat-card:hover .feat-arrow { transform: translateX(5px); }
+
       `}</style>
       <section id="features" style={S.featsSection}>
         <div style={S.featsInner}>
@@ -422,12 +421,7 @@ export default function LandingPage() {
                   <div style={{ fontSize:'14px', fontWeight:'700', color:'#1a2e3a', marginBottom:'7px' }}>{f.title}</div>
                   <div style={{ fontSize:'12px', color:'#6a8090', lineHeight:'1.65' }}>{f.desc}</div>
                 </div>
-                <div style={{ display:'flex', alignItems:'center', gap:'4px', color:'#2d4a5a', fontSize:'11px', fontWeight:'700' }}>
-                  <span>Explore</span>
-                  <svg className="feat-arrow" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#2d4a5a" strokeWidth="2.5" strokeLinecap="round">
-                    <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-                  </svg>
-                </div>
+
               </div>
             ))}
           </div>
@@ -436,31 +430,62 @@ export default function LandingPage() {
 
       {/* ── ABOUT ── */}
       <section id="about" style={S.aboutSection}>
-        <div style={S.aboutInner}>
-          <div>
+        <div style={{ maxWidth: '1060px', margin: '0 auto', display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: 'center', gap: isMobile ? '48px' : '80px' }}>
+
+          {/* Left: copy */}
+          <div style={{ flex: 1 }}>
             <div style={S.aboutLabel}>About Timecade</div>
-            <h2 style={S.aboutH2}>Built for JUW's<br />CS &amp; SE Department</h2>
+            <h2 style={S.aboutH2}>One platform,<br />four distinct roles</h2>
             <p style={S.aboutP}>
-              Timecade is a production-ready academic scheduling platform for Jinnah University for Women. It handles everything from batch management to conflict detection, with a role-based system that gives everyone exactly the access they need.
+              Every user gets exactly the view they need. Office Assistants control the schedule, Admins propose changes, Teachers track their sessions, and Students stay updated in real time.
             </p>
             <Link to="/login" style={{ textDecoration: 'none' }}>
               <button style={S.aboutBtn}>Access Dashboard</button>
             </Link>
           </div>
-          <div style={S.statsGrid}>
-            {[
-              { num: '4',   label: 'User Roles',     sub: 'Assistant, Admin, Teacher, Student' },
-              { num: '33+', label: 'Teachers',        sub: 'From the 2025 semester PDF' },
-              { num: '6',   label: 'Days / Week',     sub: 'Monday through Saturday' },
-              { num: '3',   label: 'Conflict Types',  sub: 'Teacher, Room, Batch' },
-            ].map(s => (
-              <div key={s.label} style={S.statCard}>
-                <div style={S.statNum}>{s.num}</div>
-                <div style={S.statLabel}>{s.label}</div>
-                <div style={S.statSub}>{s.sub}</div>
-              </div>
-            ))}
+
+          {/* Right: orbit SVG */}
+          <div style={{ flex: '0 0 auto', width: isMobile ? '280px' : '340px', margin: isMobile ? '0 auto' : '0' }}>
+            <svg viewBox="0 0 340 340" width="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
+
+              {/* Orbit rings */}
+              <circle cx="170" cy="170" r="130" stroke="#e4ecf0" strokeWidth="0.8" strokeDasharray="5 5"/>
+              <circle cx="170" cy="170" r="78"  stroke="#e4ecf0" strokeWidth="0.8" strokeDasharray="5 5"/>
+
+              {/* Core */}
+              <circle cx="170" cy="170" r="42" fill="#1a2e3a"/>
+              <text x="170" y="165" textAnchor="middle" fontSize="11" fontWeight="700" fill="#ffffff" fontFamily="'Plus Jakarta Sans', sans-serif">TIME</text>
+              <text x="170" y="180" textAnchor="middle" fontSize="11" fontWeight="700" fill="#7a9aaa" fontFamily="'Plus Jakarta Sans', sans-serif">CADE</text>
+
+              {/* Connector lines */}
+              <line x1="170" y1="68"  x2="170" y2="128" stroke="#d0dde4" strokeWidth="0.8"/>
+              <line x1="302" y1="170" x2="248" y2="170" stroke="#d0dde4" strokeWidth="0.8"/>
+              <line x1="170" y1="272" x2="170" y2="212" stroke="#d0dde4" strokeWidth="0.8"/>
+              <line x1="38"  y1="170" x2="92"  y2="170" stroke="#d0dde4" strokeWidth="0.8"/>
+
+              {/* Top: Office Assistant */}
+              <circle cx="170" cy="40" r="28" fill="#e1f5ee"/>
+              <text x="170" y="36" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#085041" fontFamily="'Plus Jakarta Sans', sans-serif">Office</text>
+              <text x="170" y="49" textAnchor="middle" fontSize="9"   fill="#0f6e56" fontFamily="'Plus Jakarta Sans', sans-serif">Assistant</text>
+
+              {/* Right: Admin */}
+              <circle cx="300" cy="170" r="28" fill="#e6f1fb"/>
+              <text x="300" y="166" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#0c447c" fontFamily="'Plus Jakarta Sans', sans-serif">Dept</text>
+              <text x="300" y="179" textAnchor="middle" fontSize="9"   fill="#185fa5" fontFamily="'Plus Jakarta Sans', sans-serif">Admin</text>
+
+              {/* Bottom: Teacher */}
+              <circle cx="170" cy="300" r="28" fill="#faeeda"/>
+              <text x="170" y="296" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#633806" fontFamily="'Plus Jakarta Sans', sans-serif">Teacher</text>
+              <text x="170" y="309" textAnchor="middle" fontSize="9"   fill="#854f0b" fontFamily="'Plus Jakarta Sans', sans-serif">33+ staff</text>
+
+              {/* Left: Student */}
+              <circle cx="40" cy="170" r="28" fill="#eeedfe"/>
+              <text x="40" y="166" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#3c3489" fontFamily="'Plus Jakarta Sans', sans-serif">Student</text>
+              <text x="40" y="179" textAnchor="middle" fontSize="9"   fill="#534ab7" fontFamily="'Plus Jakarta Sans', sans-serif">read-only</text>
+
+            </svg>
           </div>
+
         </div>
       </section>
 
