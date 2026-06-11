@@ -5,15 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useResponsive } from '../../hooks/useResponsive';
 import api from '../../utils/api';
 
-const DAYS       = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const DAYS_SHORT = ['Mon','Tue','Wed','Thu','Fri','Sat'];
-const MONTHS     = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-function getMiniCal(year, month) {
-  const first = new Date(year, month, 1).getDay();
-  const days  = new Date(year, month + 1, 0).getDate();
-  return { first, days };
-}
 
 export default function AssistantHome() {
   const { user }     = useAuth();
@@ -26,9 +18,6 @@ export default function AssistantHome() {
   const [loading, setLoading] = useState(true);
 
   const now = new Date();
-  const [calYear,  setCalYear]  = useState(now.getFullYear());
-  const [calMonth, setCalMonth] = useState(now.getMonth());
-
   useEffect(() => {
     Promise.all([
       api.get('/office/stats').catch(() => ({ data:{ totalBatches:0, totalTeachers:0, totalRooms:0, totalClasses:0 } })),
@@ -42,30 +31,12 @@ export default function AssistantHome() {
   }, []);
 
   const today  = new Date().toLocaleDateString('en-US', { weekday:'long' });
-  const todayD = now.getDate();
-  const todayM = now.getMonth();
-  const todayY = now.getFullYear();
-
   const greeting = () => {
     const h = now.getHours();
     if (h < 12) return 'Good morning';
     if (h < 17) return 'Good afternoon';
     return 'Good evening';
   };
-
-  const dayCounts = DAYS.map((d, i) => ({
-    day:   DAYS_SHORT[i],
-    full:  d,
-    count: entries.filter(e => e.day === d).length,
-  }));
-  const maxCount = Math.max(...dayCounts.map(d => d.count), 1);
-
-  const { first, days } = getMiniCal(calYear, calMonth);
-  const calStart   = first === 0 ? 6 : first - 1;
-  const totalCells = Math.ceil((calStart + days) / 7) * 7;
-
-  const dayIdx    = { Monday:0, Tuesday:1, Wednesday:2, Thursday:3, Friday:4, Saturday:5, Sunday:6 };
-  const activeDows = new Set(entries.map(e => dayIdx[e.day]).filter(v => v !== undefined));
 
   const typeColor = t => ({ create:'#16a34a', update:'#d97706', delete:'#dc2626' }[t] || '#5a7080');
   const typeLabel = t => ({ create:'Add class', update:'Reschedule', delete:'Remove' }[t] || t);
@@ -76,10 +47,6 @@ export default function AssistantHome() {
     { label:'Rooms',    value: stats.totalRooms,    bg:'#1a7a8a' },
     { label:'Classes',  value: stats.totalClasses,  bg:'#2E6478' },
   ];
-
-  const prevMonth = () => { if(calMonth===0){setCalMonth(11);setCalYear(y=>y-1);}else setCalMonth(m=>m-1); };
-  const nextMonth = () => { if(calMonth===11){setCalMonth(0);setCalYear(y=>y+1);}else setCalMonth(m=>m+1); };
-
   return (
     <div style={{
       padding: isMobile ? '10px' : '14px 18px',
@@ -122,132 +89,119 @@ export default function AssistantHome() {
         ))}
       </div>
 
-      {/* ── Middle: bar chart + calendar ── */}
-      <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:'10px', flex:1, minHeight:0 }}>
-
-        {/* Bar chart */}
-        <div style={{ background:'white', borderRadius:'10px', border:'1px solid #e0e8ed', padding:'14px 16px', display:'flex', flexDirection:'column', overflow:'hidden' }}>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px', flexShrink:0 }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#1a2e3a' }}>Classes per day</div>
-            <div style={{ fontSize:'10px', color:'#7a9aaa', background:'#f0f4f7', borderRadius:'5px', padding:'2px 8px' }}>{entries.length} total</div>
-          </div>
-          <div style={{ display:'flex', alignItems:'flex-end', gap:'6px', flex:1, minHeight:0 }}>
-            {dayCounts.map(({ day, full, count }) => {
-              const isToday = full === today;
-              const pct     = count === 0 ? 5 : Math.round((count / maxCount) * 90);
-              return (
-                <div key={day} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'4px', height:'100%', justifyContent:'flex-end' }}>
-                  <div style={{ fontSize:'10px', color: isToday ? '#2d4a5a' : '#aabbc8', fontWeight: isToday ? '700' : '400', minHeight:'13px' }}>
-                    {count > 0 ? count : ''}
-                  </div>
-                  <div style={{ width:'100%', background: count === 0 ? '#f0f4f7' : (isToday ? '#2d4a5a' : '#3a6070'), borderRadius:'4px 4px 0 0', height:`${pct}%`, minHeight:'4px', transition:'height 0.3s' }}/>
-                  <div style={{ fontSize:'10px', color: isToday ? '#2d4a5a' : '#7a9aaa', fontWeight: isToday ? '700' : '500' }}>{day}</div>
-                </div>
-              );
-            })}
-          </div>
-          <div style={{ display:'flex', gap:'12px', marginTop:'8px', paddingTop:'8px', borderTop:'1px solid #f0f4f7', flexShrink:0 }}>
-            {[['#2d4a5a','Today'],['#3a6070','Other'],['#f0f4f7','No class']].map(([c,l])=>(
-              <div key={l} style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'10px', color:'#7a9aaa' }}>
-                <div style={{ width:'8px', height:'8px', borderRadius:'2px', background:c, border: c==='#f0f4f7'?'1px solid #e0e8ed':'none' }}/>
-                {l}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Calendar (FIXED) ── */}
-        <div style={{ background:'white', borderRadius:'10px', border:'1px solid #e0e8ed', padding:'14px 16px', display:'flex', flexDirection:'column', overflow:'hidden', minHeight:0 }}>
-          {/* Month nav */}
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px', flexShrink:0 }}>
-            <div style={{ fontSize:'13px', fontWeight:'700', color:'#1a2e3a' }}>{MONTHS[calMonth]} {calYear}</div>
-            <div style={{ display:'flex', gap:'3px' }}>
-              <button onClick={prevMonth} style={{ background:'#2d4a5a', border:'none', borderRadius:'5px', width:'26px', height:'26px', cursor:'pointer', color:'white', fontSize:'14px', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center' }}>‹</button>
-              <button onClick={() => { setCalMonth(todayM); setCalYear(todayY); }} style={{ background:'#2d4a5a', border:'none', borderRadius:'5px', padding:'0 10px', height:'26px', cursor:'pointer', fontSize:'10px', fontWeight:'600', color:'white', fontFamily:'inherit' }}>Today</button>
-              <button onClick={nextMonth} style={{ background:'#2d4a5a', border:'none', borderRadius:'5px', width:'26px', height:'26px', cursor:'pointer', color:'white', fontSize:'14px', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center' }}>›</button>
+      {/* ── Quick Actions 2×3 grid ── */}
+      <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(3,1fr)', gap:'10px', flexShrink:0 }}>
+        {[
+          {
+            label: 'Add Class',
+            sub: 'Schedule new session',
+            icon: (
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="10" y1="16" x2="14" y2="16"/>
+              </svg>
+            ),
+            iconBg: '#e8f0fa',
+            border: '0.5px solid #d8e4f0',
+            onClick: () => navigate('/assistant/office'),
+          },
+          {
+            label: 'Reschedule',
+            sub: 'Move a class slot',
+            icon: (
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/>
+              </svg>
+            ),
+            iconBg: '#e8f0fa',
+            border: '0.5px solid #d8e4f0',
+            onClick: () => navigate('/assistant/office'),
+          },
+          {
+            label: 'Approvals',
+            sub: pending.length > 0 ? `${pending.length} pending review` : 'All caught up',
+            badge: pending.length > 0 ? pending.length : null,
+            icon: (
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={pending.length > 0 ? '#92600a' : '#1e3a5f'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+              </svg>
+            ),
+            iconBg: pending.length > 0 ? '#fef9ee' : '#e8f0fa',
+            border: pending.length > 0 ? '0.5px solid #fbbf24' : '0.5px solid #d8e4f0',
+            onClick: () => navigate('/assistant/office'),
+          },
+          {
+            label: 'Timetable',
+            sub: 'View full schedule',
+            icon: (
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/>
+              </svg>
+            ),
+            iconBg: '#e8f0fa',
+            border: '0.5px solid #d8e4f0',
+            onClick: () => navigate('/assistant/timetable'),
+          },
+          {
+            label: 'Conflicts',
+            sub: (() => { const c = entries.filter(e => e.conflict).length; return c > 0 ? `${c} need fixing` : 'No conflicts'; })(),
+            badge: (() => { const c = entries.filter(e => e.conflict).length; return c > 0 ? c : null; })(),
+            icon: (
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            ),
+            iconBg: '#fef2f2',
+            border: '0.5px solid #fecaca',
+            onClick: () => navigate('/assistant/timetable'),
+          },
+          {
+            label: 'Office Management',
+            sub: 'Rooms, batches, teachers',
+            icon: (
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+              </svg>
+            ),
+            iconBg: '#e8f0fa',
+            border: '0.5px solid #d8e4f0',
+            onClick: () => navigate('/assistant/office'),
+          },
+        ].map(({ label, sub, icon, iconBg, border, badge, onClick }) => (
+          <button
+            key={label}
+            onClick={onClick}
+            style={{
+              background: 'white',
+              borderRadius: '10px',
+              border,
+              padding: '20px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '10px',
+              cursor: 'pointer',
+              textAlign: 'center',
+              fontFamily: 'inherit',
+              position: 'relative',
+              transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(30,58,95,0.1)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+          >
+            {badge && (
+              <span style={{ position:'absolute', top:'10px', right:'10px', background:'#ef4444', color:'white', fontSize:'9px', fontWeight:'700', padding:'1px 6px', borderRadius:'8px' }}>
+                {badge}
+              </span>
+            )}
+            <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:iconBg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              {icon}
             </div>
-          </div>
-
-          {/* Day headers */}
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'3px', marginBottom:'4px', flexShrink:0 }}>
-            {['Mo','Tu','We','Th','Fr','Sa','Su'].map((d,i) => (
-              <div key={d} style={{
-                textAlign:'center', fontSize:'10px', fontWeight:'700',
-                color: i===5 ? '#1a7a8a' : i===6 ? '#aabbc8' : '#2d4a5a',
-                padding:'4px 0',
-                background: i < 6 ? '#f0f6fa' : '#f8fafc',
-                borderRadius:'4px',
-              }}>{d}</div>
-            ))}
-          </div>
-
-          {/* Day cells — FIXED: flex:1 + minHeight:0 + gridAutoRows:1fr removes overflow */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(7,1fr)',
-            gridAutoRows: '1fr',   // ← each row gets equal share of available height
-            gap: '3px',
-            flex: 1,
-            minHeight: 0,          // ← lets the grid shrink inside the flex container
-            overflow: 'hidden',
-          }}>
-            {Array.from({ length: totalCells }).map((_, i) => {
-              const dayNum     = i - calStart + 1;
-              const valid      = dayNum >= 1 && dayNum <= days;
-              const isToday    = valid && dayNum === todayD && calMonth === todayM && calYear === todayY;
-              const dow        = i % 7; // 0=Mon
-              const hasClasses = valid && activeDows.has(dow) && dow < 6;
-              const isSun      = dow === 6;
-              const isSat      = dow === 5;
-
-              let bg = 'transparent';
-              let color = '#1a2e3a';
-              let fontWeight = '500';
-
-              if (isToday)            { bg = '#2d4a5a';  color = 'white';   fontWeight = '700'; }
-              else if (hasClasses)    { bg = '#e8f4fd';  color = '#1a5a7a'; fontWeight = '600'; }
-              else if (isSat && valid){ bg = '#f0faf8';  color = '#1a7a8a'; fontWeight = '600'; }
-
-              return (
-                <div key={i} style={{
-                  borderRadius: '6px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: bg,
-                  opacity: !valid || isSun ? 0.18 : 1,
-                  border: hasClasses && !isToday ? '1px solid #b8d9f5' : isToday ? 'none' : '1px solid transparent',
-                  // aspectRatio removed — cells fill grid rows naturally
-                }}>
-                  <span style={{ fontSize:'12px', fontWeight, color, lineHeight:1 }}>
-                    {valid ? dayNum : ''}
-                  </span>
-                  {hasClasses && !isToday && (
-                    <div style={{ width:'4px', height:'4px', borderRadius:'50%', background:'#2d4a5a', marginTop:'2px' }}/>
-                  )}
-                  {isToday && (
-                    <div style={{ width:'4px', height:'4px', borderRadius:'50%', background:'rgba(255,255,255,0.6)', marginTop:'2px' }}/>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Legend */}
-          <div style={{ display:'flex', gap:'14px', marginTop:'8px', paddingTop:'8px', borderTop:'1px solid #f0f4f7', flexShrink:0 }}>
-            {[
-              { c:'#2d4a5a', l:'Today',        dot:false },
-              { c:'#e8f4fd', l:'Has classes',  dot:true,  border:'#b8d9f5', tc:'#1a5a7a' },
-              { c:'#f0faf8', l:'Saturday',     dot:false, border:'#b8d9f5', tc:'#1a7a8a' },
-            ].map(({ c, l, dot, border, tc }) => (
-              <div key={l} style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'10px', color:'#7a9aaa' }}>
-                <div style={{ width:'12px', height:'12px', borderRadius:'3px', background:c, border: border ? `1px solid ${border}` : 'none', flexShrink:0 }}/>
-                <span style={{ color: tc||'#7a9aaa' }}>{l}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+            <div>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#1a2e3a' }}>{label}</div>
+              <div style={{ fontSize:'10px', color: label === 'Conflicts' && badge ? '#dc2626' : '#8aa0ba', marginTop:'3px' }}>{sub}</div>
+            </div>
+          </button>
+        ))}
       </div>
 
       {/* ── Pending approvals ── */}

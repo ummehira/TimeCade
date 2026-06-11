@@ -15,7 +15,7 @@ import OfficeMgmtPage from './OfficeMgmtPage';
 const NAV = [
   { to:'/assistant',           label:'Dashboard',         icon:LayoutDashboard, exact:true },
   { to:'/assistant/timetable', label:'Timetable',         icon:Calendar },
-  { to:'/assistant/office',    label:'Office Management', icon:Building2 },
+  { to:'/assistant/office',    label:'Resource Management', icon:Building2 },
 ];
 
 export default function AssistantDashboard() {
@@ -129,7 +129,7 @@ export default function AssistantDashboard() {
         <Routes>
           <Route index            element={<><TopHeader title="Dashboard"         icon={LayoutDashboard} onMenuClick={isMobile ? () => setSidebarOpen(o => !o) : null}/><AssistantHome/></>}/>
           <Route path="timetable" element={<><TopHeader title="Timetable"         icon={Calendar}        onMenuClick={isMobile ? () => setSidebarOpen(o => !o) : null}/><TimetablePage canEdit={true}/></>}/>
-          <Route path="office/*"  element={<><TopHeader title="Office Management" icon={Building2}       onMenuClick={isMobile ? () => setSidebarOpen(o => !o) : null}/><OfficeMgmtPage/></>}/>
+          <Route path="office/*"  element={<><TopHeader title="Resource Management" icon={Building2}       onMenuClick={isMobile ? () => setSidebarOpen(o => !o) : null}/><OfficeMgmtPage/></>}/>
         </Routes>
       </div>
     </div>

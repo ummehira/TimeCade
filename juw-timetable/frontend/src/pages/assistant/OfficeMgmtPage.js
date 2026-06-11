@@ -121,7 +121,9 @@ function BatchTab() {
   const [editSel,     setEditSel]     = useState([]);
   const [batchCourses,setBatchCourses]= useState({});
   const [viewBatch,   setViewBatch]   = useState(null); // batch whose detail panel is open
+  const [batchNameOverride, setBatchNameOverride] = useState('');
   const MAJORS=[{l:'Computer Science',c:'CS'},{l:'Software Engineering',c:'SE'},{l:'Data Science',c:'DS'}];
+  const derivedBatchName = form.major_code ? `BS${form.major_code}-${form.year}` : '';
 
   const loadData = () => {
     api.get('/office/batches').then(r=>{
@@ -142,6 +144,7 @@ function BatchTab() {
     const maj=MAJORS.find(x=>x.c===code); if(!maj) return;
     const dep=depts.find(x=>x.code===code);
     setForm(f=>({...f,major:maj.l,major_code:maj.c,department_id:dep?.id||''}));
+    setBatchNameOverride('');
     setSelCourses([]);
   };
 
@@ -152,7 +155,7 @@ function BatchTab() {
     if(!form.major_code){ setM({ok:false,text:'Please select a major.'}); return; }
     if(selCourses.length===0){ setM({ok:false,text:'Please assign at least one course to this batch.'}); return; }
     // Duplicate check
-    const batchName = form.batch_name || `BS${form.major_code}-${form.year}`;
+    const batchName = batchNameOverride.trim() || derivedBatchName || form.batch_name;
     const duplicate = batches.find(b=>b.batch_name.trim().toLowerCase()===batchName.trim().toLowerCase());
     if(duplicate){ setM({ok:false,text:`A batch named "${batchName}" already exists.`}); setTimeout(()=>setM(null),4000); return; }
     try{
@@ -162,7 +165,7 @@ function BatchTab() {
       }
       loadData();
       setM({ok:true,text:`Batch added with ${selCourses.length} course(s).`});
-      setForm(f=>({...f,batch_name:''})); setSelCourses([]); setSelRoom('');
+      setForm(f=>({...f,batch_name:''})); setSelCourses([]); setSelRoom(''); setBatchNameOverride('');
     }catch(err){
       const msg = err.response?.data?.message||'';
       if(msg.toLowerCase().includes('duplicate')||msg.toLowerCase().includes('exists')||err.response?.status===409){
@@ -276,7 +279,27 @@ function BatchTab() {
           <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Batch</div>
           <form onSubmit={handleSubmit}>
             <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr 1fr 1fr',gap:'12px',marginBottom:'16px' }}>
-              <div><label style={fl}>Batch Name</label><input style={fi} placeholder="e.g. BSCS-2025" value={form.batch_name} onChange={e=>setForm(f=>({...f,batch_name:e.target.value}))}/></div>
+              <div>
+                <label style={fl}>Batch Name</label>
+                <div style={{ position:'relative' }}>
+                  <input
+                    style={{ ...fi, background: batchNameOverride ? 'white' : '#f0f4f7', color: batchNameOverride ? '#1a2e3a' : '#4a7a93', fontWeight: batchNameOverride ? '400' : '600' }}
+                    placeholder={derivedBatchName || 'Select major & year first'}
+                    value={batchNameOverride}
+                    onChange={e=>setBatchNameOverride(e.target.value)}
+                  />
+                  {!batchNameOverride && derivedBatchName && (
+                    <span style={{ position:'absolute',left:'11px',top:'50%',transform:'translateY(-50%)',fontSize:'12px',fontWeight:'600',color:'#4a7a93',pointerEvents:'none' }}>{derivedBatchName}</span>
+                  )}
+                  {batchNameOverride && (
+                    <button type="button" onClick={()=>setBatchNameOverride('')} title="Reset to auto name"
+                      style={{ position:'absolute',right:'8px',top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#aabbc8',display:'flex',padding:0 }}>
+                      <X size={13}/>
+                    </button>
+                  )}
+                </div>
+                <div style={{ fontSize:'10px',color:'#8fa5b0',marginTop:'3px' }}>{derivedBatchName && !batchNameOverride ? 'Auto-generated · click to override' : batchNameOverride ? 'Custom name · click × to reset' : 'Select major & year to auto-generate'}</div>
+              </div>
               <div><label style={fl}>Major *</label>
                 <select style={fi} required value={form.major_code} onChange={e=>handleMajor(e.target.value)}>
                   <option value="">Select Major</option>{MAJORS.map(m=><option key={m.c} value={m.c}>{m.l}</option>)}
