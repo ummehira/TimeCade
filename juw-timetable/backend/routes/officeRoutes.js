@@ -136,11 +136,20 @@ router.put('/teachers/:id', authenticate, canEdit, async (req, res) => {
 // ── Subjects ──────────────────────────────────────────────────────────────
 router.get('/subjects', authenticate, async (req, res) => {
   try {
+    const { major_code } = req.query;
+    let where = '';
+    const params = [];
+    if (major_code) {
+      params.push(major_code);
+      where = `WHERE d.code = $1`;
+    }
     const r = await pool.query(
-      `SELECT s.*, d.name AS department_name
+      `SELECT s.*, d.name AS department_name, d.code AS major_code
        FROM subjects s
        LEFT JOIN departments d ON s.department_id = d.id
-       ORDER BY s.name`
+       ${where}
+       ORDER BY s.name`,
+      params
     );
     res.json(r.rows);
   } catch (err) { res.status(500).json({ message: 'Server error.' }); }

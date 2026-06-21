@@ -10,7 +10,6 @@ const btn = { background:'#2d4a5a',color:'white',border:'none',padding:'9px 20px
 const card = { background:'#f8fafc',border:'1px solid #e0e8ed',borderRadius:'10px',padding:'18px 20px',marginBottom:'20px' };
 const msg  = ok => ({ padding:'9px 14px',borderRadius:'7px',fontSize:'12px',fontWeight:'600',marginBottom:'14px',background:ok?'#dcfce7':'#fef2f2',color:ok?'#16a34a':'#dc2626',border:`1px solid ${ok?'#86efac':'#fecaca'}`,display:'flex',alignItems:'center',gap:'7px' });
 
-// Reusable search bar
 function SearchBar({ value, onChange, placeholder='Search...' }) {
   return (
     <div style={{ position:'relative',marginBottom:'14px' }}>
@@ -24,7 +23,6 @@ function SearchBar({ value, onChange, placeholder='Search...' }) {
   );
 }
 
-// Reusable checklist for multi-select
 function Checklist({ items, selected, onToggle, labelKey='name', emptyText='No items found', maxHeight=160 }) {
   return (
     <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:'5px',maxHeight,overflowY:'auto',padding:'2px' }}>
@@ -45,7 +43,6 @@ function Checklist({ items, selected, onToggle, labelKey='name', emptyText='No i
   );
 }
 
-// Section header inside a form card
 function SectionLabel({ children, count }) {
   return (
     <div style={{ display:'flex',alignItems:'center',gap:'8px',marginBottom:'10px' }}>
@@ -64,7 +61,7 @@ export default function OfficeMgmtPage({ tab: propTab }) {
 
   const TABS = [
     { id:'batches',    label:'Batch Management',   icon:GraduationCap },
-    { id:'teachers',   label:'Teacher Catalogue',  icon:Users },
+    { id:'teachers',   label:'Teacher Management',  icon:Users },
     { id:'courses',    label:'Course Management',  icon:BookOpen },
     { id:'classrooms', label:'Classroom Status',   icon:Building2 },
     { id:'enrollment', label:'Student Enrollment', icon:Users },
@@ -75,7 +72,6 @@ export default function OfficeMgmtPage({ tab: propTab }) {
     <div className="page-content">
       <div className="card">
         <div className="card-body" style={{ padding:0 }}>
-          {/* Tab bar */}
           <div style={{ display:'flex',borderBottom:'1px solid #e0e8ed',padding:'0 20px',background:'white',overflowX:'auto' }}>
             {TABS.map(t=>(
               <button key={t.id} onClick={()=>setTab(t.id)} style={{
@@ -104,6 +100,7 @@ export default function OfficeMgmtPage({ tab: propTab }) {
   );
 }
 
+// ── BATCH TAB ─────────────────────────────────────────────────────────────
 function BatchTab() {
   const { isMobile } = useResponsive();
   const [batches,    setBatches]    = useState([]);
@@ -121,9 +118,7 @@ function BatchTab() {
   const [editSel,     setEditSel]     = useState([]);
   const [batchCourses,setBatchCourses]= useState({});
   const [viewBatch,   setViewBatch]   = useState(null); // batch whose detail panel is open
-  const [batchNameOverride, setBatchNameOverride] = useState('');
   const MAJORS=[{l:'Computer Science',c:'CS'},{l:'Software Engineering',c:'SE'},{l:'Data Science',c:'DS'}];
-  const derivedBatchName = form.major_code ? `BS${form.major_code}-${form.year}` : '';
 
   const loadData = () => {
     api.get('/office/batches').then(r=>{
@@ -144,8 +139,13 @@ function BatchTab() {
     const maj=MAJORS.find(x=>x.c===code); if(!maj) return;
     const dep=depts.find(x=>x.code===code);
     setForm(f=>({...f,major:maj.l,major_code:maj.c,department_id:dep?.id||''}));
-    setBatchNameOverride('');
     setSelCourses([]);
+    // Load only courses belonging to the selected major
+    if(code){
+      api.get('/office/subjects',{params:{major_code:code}}).then(r=>setSubjects(r.data)).catch(()=>{});
+    } else {
+      api.get('/office/subjects').then(r=>setSubjects(r.data)).catch(()=>{});
+    }
   };
 
   const toggle = id => setSelCourses(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
@@ -153,9 +153,8 @@ function BatchTab() {
   const handleSubmit = async e => {
     e.preventDefault();
     if(!form.major_code){ setM({ok:false,text:'Please select a major.'}); return; }
-    if(selCourses.length===0){ setM({ok:false,text:'Please assign at least one course to this batch.'}); return; }
     // Duplicate check
-    const batchName = batchNameOverride.trim() || derivedBatchName || form.batch_name;
+    const batchName = form.batch_name || `BS${form.major_code}-${form.year}`;
     const duplicate = batches.find(b=>b.batch_name.trim().toLowerCase()===batchName.trim().toLowerCase());
     if(duplicate){ setM({ok:false,text:`A batch named "${batchName}" already exists.`}); setTimeout(()=>setM(null),4000); return; }
     try{
@@ -164,8 +163,8 @@ function BatchTab() {
         try{ await api.post('/assignments/batch-subjects',{batch_id:r.data.id,subject_id:sid,semester:1}); }catch(_){}
       }
       loadData();
-      setM({ok:true,text:`Batch added with ${selCourses.length} course(s).`});
-      setForm(f=>({...f,batch_name:''})); setSelCourses([]); setSelRoom(''); setBatchNameOverride('');
+      setM({ok:true,text:selCourses.length>0?`Batch added with ${selCourses.length} course(s).`:'Batch added successfully.'});
+      setForm(f=>({...f,batch_name:''})); setSelCourses([]); setSelRoom('');
     }catch(err){
       const msg = err.response?.data?.message||'';
       if(msg.toLowerCase().includes('duplicate')||msg.toLowerCase().includes('exists')||err.response?.status===409){
@@ -279,27 +278,7 @@ function BatchTab() {
           <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Batch</div>
           <form onSubmit={handleSubmit}>
             <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr 1fr 1fr',gap:'12px',marginBottom:'16px' }}>
-              <div>
-                <label style={fl}>Batch Name</label>
-                <div style={{ position:'relative' }}>
-                  <input
-                    style={{ ...fi, background: batchNameOverride ? 'white' : '#f0f4f7', color: batchNameOverride ? '#1a2e3a' : '#4a7a93', fontWeight: batchNameOverride ? '400' : '600' }}
-                    placeholder={derivedBatchName || 'Select major & year first'}
-                    value={batchNameOverride}
-                    onChange={e=>setBatchNameOverride(e.target.value)}
-                  />
-                  {!batchNameOverride && derivedBatchName && (
-                    <span style={{ position:'absolute',left:'11px',top:'50%',transform:'translateY(-50%)',fontSize:'12px',fontWeight:'600',color:'#4a7a93',pointerEvents:'none' }}>{derivedBatchName}</span>
-                  )}
-                  {batchNameOverride && (
-                    <button type="button" onClick={()=>setBatchNameOverride('')} title="Reset to auto name"
-                      style={{ position:'absolute',right:'8px',top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#aabbc8',display:'flex',padding:0 }}>
-                      <X size={13}/>
-                    </button>
-                  )}
-                </div>
-                <div style={{ fontSize:'10px',color:'#8fa5b0',marginTop:'3px' }}>{derivedBatchName && !batchNameOverride ? 'Auto-generated · click to override' : batchNameOverride ? 'Custom name · click × to reset' : 'Select major & year to auto-generate'}</div>
-              </div>
+              <div><label style={fl}>Batch Name</label><input style={fi} placeholder="e.g. BSCS-2025" value={form.batch_name} onChange={e=>setForm(f=>({...f,batch_name:e.target.value}))}/></div>
               <div><label style={fl}>Major *</label>
                 <select style={fi} required value={form.major_code} onChange={e=>handleMajor(e.target.value)}>
                   <option value="">Select Major</option>{MAJORS.map(m=><option key={m.c} value={m.c}>{m.l}</option>)}
@@ -315,13 +294,18 @@ function BatchTab() {
               <div><label style={fl}>No. of Students</label><input style={fi} type="number" value={form.student_count} onChange={e=>setForm(f=>({...f,student_count:parseInt(e.target.value)}))}/></div>
             </div>
             <div style={{ border:'2px solid #dde3e8',borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
-              <SectionLabel count={selCourses.length}>Assign Courses to this Batch *</SectionLabel>
+              <SectionLabel count={selCourses.length}>Assign Courses to this Batch</SectionLabel>
               {!form.major_code
-                ?<div style={{ padding:'16px',textAlign:'center',color:'#aabbc8',fontSize:'12px',border:'1px dashed #e0e8ed',borderRadius:'7px' }}>Select a major first to assign courses</div>
-                :<Checklist items={subjects} selected={selCourses} onToggle={toggle} labelKey="name" emptyText="No courses found"/>
+                ?<div style={{ padding:'16px',textAlign:'center',color:'#aabbc8',fontSize:'12px',border:'1px dashed #e0e8ed',borderRadius:'7px' }}>Select a major first to see its courses</div>
+                : subjects.length===0
+                  ?<div style={{ padding:'16px',textAlign:'center',color:'#aabbc8',fontSize:'12px',border:'1px dashed #e0e8ed',borderRadius:'7px' }}>No courses found for <strong>{form.major_code}</strong> — add them in Course Management first</div>
+                  :<>
+                    <div style={{ fontSize:'10px',color:'#7a9aaa',marginBottom:'8px' }}>Showing {subjects.length} course{subjects.length!==1?'s':''} for <strong style={{ color:'#2d4a5a' }}>{form.major_code}</strong></div>
+                    <Checklist items={subjects} selected={selCourses} onToggle={toggle} labelKey="name" emptyText="No courses found"/>
+                  </>
               }
             </div>
-            <button type="submit" style={btn}><Plus size={13}/> Add Batch</button>
+            <button type="submit" style={btn}> Add Batch</button>
           </form>
         </div>
       )}
@@ -462,6 +446,7 @@ function BatchTab() {
     </div>
   );
 }
+
 // ── TEACHER TAB ───────────────────────────────────────────────────────────
 function TeacherTab() {
   const { isMobile } = useResponsive();
@@ -472,11 +457,10 @@ function TeacherTab() {
   const [form, setForm] = useState({ teacher_id:'',full_name:'',department_id:'',specialization:'' });
   const [m, setM]       = useState(null);
   const [search,        setSearch]       = useState('');
-  // Edit panel state (like Batch/Course tabs)
   const [editTeacher,   setEditTeacher]  = useState(null);
   const [editForm,      setEditForm]     = useState({});
-  const [editCourses,   setEditCourses]  = useState([]); // current assigned rows
-  const [editSel,       setEditSel]      = useState([]); // selected subject ids
+  const [editCourses,   setEditCourses]  = useState([]);
+  const [editSel,       setEditSel]      = useState([]);
 
   const loadData = () => {
     api.get('/office/teachers').then(r=>setTeachers(r.data));
@@ -489,7 +473,6 @@ function TeacherTab() {
 
   const handleAdd = async e => {
     e.preventDefault();
-    if(selCourses.length===0){ setM({ok:false,text:'Please assign at least one course to this teacher.'}); return; }
     try{
       const dept_id = depts.length>0 ? depts[0].id : '';
       await api.post('/office/teachers',{...form,department_id:dept_id});
@@ -501,7 +484,7 @@ function TeacherTab() {
         }
       }
       setTeachers(tRes.data);
-      setM({ok:true,text:`Teacher added with ${selCourses.length} course(s).`});
+      setM({ok:true,text:selCourses.length>0?`Teacher added with ${selCourses.length} course(s).`:'Teacher added successfully.'});
       setForm({teacher_id:'',full_name:'',department_id:'',specialization:''}); setSelCourses([]);
     }catch(err){ setM({ok:false,text:err.response?.data?.message||'Error'}); }
     setTimeout(()=>setM(null),3500);
@@ -518,10 +501,8 @@ function TeacherTab() {
   };
 
   const handleEditSave = async () => {
-    if(editSel.length===0){ setM({ok:false,text:'Please assign at least one course.'}); setTimeout(()=>setM(null),3500); return; }
     try{
       await api.put(`/office/teachers/${editTeacher.id}`,{ ...editForm, department_id:editTeacher.department_id });
-      // Sync courses
       const current = editCourses.map(c=>c.subject_id);
       const toAdd    = editSel.filter(id=>!current.includes(id));
       const toRemove = editCourses.filter(c=>!editSel.includes(c.subject_id));
@@ -544,7 +525,6 @@ function TeacherTab() {
     <div>
       {m&&<div style={msg(m.ok)}>{m.ok?<Check size={13}/>:<X size={13}/>} {m.text}</div>}
 
-      {/* ── Edit Panel ── */}
       {editTeacher&&(
         <div style={{ ...card,border:'2px solid #2d4a5a',marginBottom:'20px' }}>
           <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px' }}>
@@ -571,8 +551,6 @@ function TeacherTab() {
           </div>
           <div style={{ border:'2px solid #dde3e8',borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
             <SectionLabel count={editSel.length}>Assigned Courses</SectionLabel>
-
-            {/* Currently assigned — shown as removable tags */}
             {editSel.length>0&&(
               <div style={{ marginBottom:'12px' }}>
                 <div style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'7px' }}>Currently Assigned — click × to remove</div>
@@ -593,8 +571,6 @@ function TeacherTab() {
                 </div>
               </div>
             )}
-
-            {/* Add more courses */}
             <div style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'7px' }}>Add More Courses</div>
             <Checklist items={subjects.filter(s=>!editSel.includes(s.id))} selected={[]}
               onToggle={id=>setEditSel(p=>[...p,id])}
@@ -607,7 +583,6 @@ function TeacherTab() {
         </div>
       )}
 
-      {/* ── Add New Teacher ── */}
       {!editTeacher&&(
         <div style={card}>
           <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Teacher</div>
@@ -621,15 +596,14 @@ function TeacherTab() {
               <div><label style={fl}>Full Name *</label><input style={fi} placeholder="Ms. Jane Doe" value={form.full_name} onChange={e=>setForm(f=>({...f,full_name:e.target.value}))} required/></div>
             </div>
             <div style={{ border:'2px solid #dde3e8',borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
-              <SectionLabel count={selCourses.length}>Assign Courses to this Teacher *</SectionLabel>
+              <SectionLabel count={selCourses.length}>Assign Courses to this Teacher</SectionLabel>
               <Checklist items={subjects} selected={selCourses} onToggle={toggle} labelKey="name" emptyText="No courses available"/>
             </div>
-            <button type="submit" style={btn}><Plus size={13}/> Add Teacher</button>
+            <button type="submit" style={btn}> Add Teacher</button>
           </form>
         </div>
       )}
 
-      {/* ── Teacher Directory ── */}
       <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px' }}><Users size={14}/> Teacher Directory</div>
       <SearchBar value={search} onChange={setSearch} placeholder="Search by name, ID or course..."/>
       <div style={{ borderRadius:'10px',overflow:'hidden',border:'1px solid #e0e8ed' }}>
@@ -666,7 +640,8 @@ function TeacherTab() {
     </div>
   );
 }
-//COurse Tab
+
+// ── COURSE TAB ────────────────────────────────────────────────────────────
 // Defined OUTSIDE CourseTab so it never remounts on re-render
 function CourseCodeField({ value, onChange, errMsg }) {
   return (
@@ -696,8 +671,9 @@ function CourseTab() {
   const [subjects,    setSubjects]  = useState([]);
   const [teachers,    setTeachers]  = useState([]);
   const [selTeachers, setSelTeach]  = useState([]);
-  const [form, setForm] = useState({ code:'',name:'',short_name:'',credit_hours:3,credit_format:'3+0',has_lab:false });
+  const [form, setForm] = useState({ code:'',name:'',short_name:'',credit_hours:3,credit_format:'3+0',has_lab:false,major_code:'',department_id:'' });
   const [codeErr, setCodeErr] = useState('');
+  const [depts, setDepts] = useState([]);
   const [m, setM]       = useState(null);
   const [search, setSearch] = useState('');
   const [editCourse,    setEditCourse]   = useState(null);
@@ -710,7 +686,10 @@ function CourseTab() {
     api.get('/office/subjects').then(r=>setSubjects(r.data));
     api.get('/office/teachers').then(r=>setTeachers(r.data));
   };
-  useEffect(()=>{ loadData(); },[]);
+  useEffect(()=>{
+    loadData();
+    api.get('/office/departments').then(r=>setDepts(r.data)).catch(()=>{});
+  },[]);
 
   const toggle = id => setSelTeach(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
   const isFYP  = f => /fyp|final.year.project/i.test(f.name+' '+f.code);
@@ -729,6 +708,12 @@ function CourseTab() {
     // Show inline error only once they've typed at least 8 chars
     errSetter(val.length >= 8 ? validateCode(val) : '');
   };
+
+  const MAJORS = [
+    { code:'CS', label:'Computer Science' },
+    { code:'SE', label:'Software Engineering' },
+    { code:'DS', label:'Data Science' },
+  ];
 
   const CREDIT_FORMATS = [
     { value:'3+1', label:'3+1  —  3 theory + 1 lab (3 hrs)', theory:3, lab:1, has_lab:true  },
@@ -749,15 +734,17 @@ function CourseTab() {
     if(err){ setCodeErr(err); return; }
     if(selTeachers.length===0 && !isFYP(form)){ setM({ok:false,text:'Please assign at least one teacher to this course.'}); return; }
     try{
+      if(!form.major_code){ setM({ok:false,text:'Please select a major for this course.'}); return; }
+      const dept = depts.find(d=>d.code===form.major_code);
       const fmt = getCreditFormat(form.credit_format||'3+0');
-      const r=await api.post('/office/subjects',{ ...form, credit_format:form.credit_format, credit_hours:fmt.theory+fmt.lab, has_lab:fmt.has_lab });
+      const r=await api.post('/office/subjects',{ ...form, department_id: dept?.id||null, credit_format:form.credit_format, credit_hours:fmt.theory+fmt.lab, has_lab:fmt.has_lab });
       for(const tid of selTeachers){
         try{ await api.post('/assignments/teacher-subjects',{teacher_id:tid,subject_id:r.data.id}); }catch(_){}
       }
       loadData();
       const teacherMsg = selTeachers.length>0 ? `with ${selTeachers.length} teacher(s)` : '(no supervisor assigned)';
       setM({ok:true,text:`Course added ${teacherMsg}.`});
-      setForm({code:'',name:'',short_name:'',credit_hours:3,credit_format:'3+0',has_lab:false});
+      setForm({code:'',name:'',short_name:'',credit_hours:3,credit_format:'3+0',has_lab:false,major_code:'',department_id:''});
       setSelTeach([]); setCodeErr('');
     }catch(err){ setM({ok:false,text:err.response?.data?.message||'Error'}); }
     setTimeout(()=>setM(null),3500);
@@ -773,7 +760,7 @@ function CourseTab() {
       !s.has_lab && s.credit_hours === 2 ? '2+0' :
       s.has_lab && s.credit_hours === 0 ? '0+3' : '3+0'
     );
-    setEditForm({ code:s.code||'', name:s.name, short_name:s.short_name||'', credit_hours:s.credit_hours, credit_format:fmt, has_lab:s.has_lab });
+    setEditForm({ code:s.code||'', name:s.name, short_name:s.short_name||'', credit_hours:s.credit_hours, credit_format:fmt, has_lab:s.has_lab, major_code:s.major_code||'', department_id:s.department_id||'' });
     try{
       const r=await api.get('/assignments/teacher-subjects',{params:{subject_id:s.id}});
       setEditTeachers(r.data); setEditSelT(r.data.map(x=>x.teacher_id));
@@ -790,8 +777,9 @@ function CourseTab() {
     const isFYPCourse = /fyp|final.year.project/i.test((editForm.name||editCourse.name)+' '+(editForm.code||editCourse.code));
     if(editSelT.length===0 && !isFYPCourse){ setM({ok:false,text:'Please assign at least one teacher to this course.'}); setTimeout(()=>setM(null),3500); return; }
     try{
+      const dept = editForm.major_code ? depts.find(d=>d.code===editForm.major_code) : null;
       const fmt = getCreditFormat(editForm.credit_format||'3+0');
-      await api.put(`/office/subjects/${editCourse.id}`,{ ...editForm, credit_format:editForm.credit_format, credit_hours:fmt.theory+fmt.lab, has_lab:fmt.has_lab });
+      await api.put(`/office/subjects/${editCourse.id}`,{ ...editForm, department_id: dept?.id||editForm.department_id||null, credit_format:editForm.credit_format, credit_hours:fmt.theory+fmt.lab, has_lab:fmt.has_lab });
       const current = editTeachers.map(t=>t.teacher_id);
       const toAdd   = editSelT.filter(id=>!current.includes(id));
       const toRemove= editTeachers.filter(t=>!editSelT.includes(t.teacher_id));
@@ -843,6 +831,13 @@ function CourseTab() {
             />
             <div><label style={fl}>Course Name</label><input style={fi} value={editForm.name||''} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))}/></div>
             <div><label style={fl}>Short Name</label><input style={fi} value={editForm.short_name||''} onChange={e=>setEditForm(f=>({...f,short_name:e.target.value}))}/></div>
+          </div>
+          <div style={{ marginBottom:'12px' }}>
+            <label style={fl}>Major</label>
+            <select style={fi} value={editForm.major_code||''} onChange={e=>setEditForm(f=>({...f,major_code:e.target.value}))}>
+              <option value="">-- Not assigned --</option>
+              {MAJORS.map(m=><option key={m.code} value={m.code}>{m.label} ({m.code})</option>)}
+            </select>
           </div>
           <div style={{ marginBottom:'14px' }}>
             <label style={fl}>Credit Hour Format *</label>
@@ -898,6 +893,14 @@ function CourseTab() {
               <div><label style={fl}>Course Name *</label><input style={fi} placeholder="Object Oriented Programming" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} required/></div>
               <div><label style={fl}>Short Name</label><input style={fi} placeholder="OOP" value={form.short_name} onChange={e=>setForm(f=>({...f,short_name:e.target.value}))}/></div>
             </div>
+            <div style={{ marginBottom:'12px' }}>
+              <label style={fl}>Major *</label>
+              <select style={fi} required value={form.major_code} onChange={e=>setForm(f=>({...f,major_code:e.target.value}))}>
+                <option value="">-- Select Major --</option>
+                {MAJORS.map(m=><option key={m.code} value={m.code}>{m.label} ({m.code})</option>)}
+              </select>
+              {!form.major_code && <div style={{ fontSize:'10px',color:'#7a9aaa',marginTop:'4px' }}>Select the major this course belongs to</div>}
+            </div>
             <div style={{ marginBottom:'14px' }}>
               <label style={fl}>Credit Hour Format *</label>
               <select style={fi} value={form.credit_format||'3+0'} onChange={e=>applyFormat(e.target.value, setForm)} required>
@@ -928,7 +931,7 @@ function CourseTab() {
               )}
               <Checklist items={teachers} selected={selTeachers} onToggle={toggle} labelKey="full_name" emptyText="No teachers found"/>
             </div>
-            <button type="submit" style={btn}><Plus size={13}/> Add Course</button>
+            <button type="submit" style={btn}> Add Course</button>
           </form>
         </div>
       )}
@@ -938,17 +941,25 @@ function CourseTab() {
       <SearchBar value={search} onChange={setSearch} placeholder="Search by name, code or short name..."/>
       <div style={{ borderRadius:'10px',overflow:'hidden',border:'1px solid #e0e8ed' }}>
         <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
-          <thead><tr style={{ background:'#2d4a5a',color:'white' }}>
-            {['Code','Course Name','Short Name','Credit Format','Lab','Action'].map(h=>(
-              <th key={h} style={{ padding:'10px 14px',textAlign:'left',fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px' }}>{h}</th>
-            ))}
-          </tr></thead>
+         <thead>
+        <tr style={{ background:'#2d4a5a',color:'white' }}>
+        {['Code', 'Course Name', 'Major', 'Major Code', 'Credit Format', 'Lab', 'Action'].map(h=>(
+          <th key={h} style={{ padding:'10px 14px',textAlign:'left',fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px' }}>{h}</th>
+          ))}
+         </tr>
+            </thead>
           <tbody>
             {filtered.map(s=>(
               <tr key={s.id} style={{ borderBottom:'0.5px solid #e8edf0',background:editCourse?.id===s.id?'#f0f6fa':'white' }}>
                 <td style={{ padding:'10px 14px' }}><strong style={{ fontFamily:'monospace',color:'#2d4a5a' }}>{s.code}</strong></td>
                 <td style={{ padding:'10px 14px',fontWeight:'600',color:'#1a2e3a' }}>{s.name}</td>
                 <td style={{ padding:'10px 14px' }}><span style={{ background:'#e8f4fd',color:'#1a5a7a',border:'1px solid #b8d9f5',borderRadius:'10px',padding:'2px 9px',fontSize:'10px',fontWeight:'600' }}>{s.short_name}</span></td>
+                <td style={{ padding:'10px 14px' }}>
+                  {s.major_code
+                    ? <span style={{ background:'#f0f4f7',color:'#2d4a5a',border:'1px solid #c8d8e0',borderRadius:'6px',padding:'2px 9px',fontSize:'10px',fontWeight:'700' }}>{s.major_code}</span>
+                    : <span style={{ color:'#aabbc8',fontSize:'11px' }}>—</span>
+                  }
+                </td>
                 <td style={{ padding:'10px 14px' }}>
                   <span style={{ fontFamily:'monospace',fontWeight:'700',color:'#2d4a5a',fontSize:'13px' }}>
                     {s.credit_format||(s.has_lab?(s.credit_hours===3?'3+1':'2+1'):(s.credit_hours===3?'3+0':'2+0'))}
@@ -977,6 +988,7 @@ function CourseTab() {
     </div>
   );
 }
+
 // ── CLASSROOM TAB ─────────────────────────────────────────────────────────
 function ClassroomTab() {
   const { isMobile } = useResponsive();
@@ -985,9 +997,7 @@ function ClassroomTab() {
   const [editId,   setEditId]  = useState(null);
   const [editForm, setEditForm]= useState({});
   const [m,        setM]       = useState(null);
-
-  // Modal state
-  const [viewRoom,    setViewRoom]    = useState(null); // room object
+  const [viewRoom,    setViewRoom]    = useState(null);
   const [schedule,    setSchedule]    = useState([]);
   const [schedLoading,setSchedLoading]= useState(false);
 
@@ -1022,55 +1032,30 @@ function ClassroomTab() {
   };
 
   const openModal = async room => {
-    setViewRoom(room);
-    setSchedule([]);
-    setSchedLoading(true);
-    try{
-      const r = await api.get('/office/room-schedule',{params:{room_id:room.id}});
-      setSchedule(r.data||[]);
-    }catch(_){ setSchedule([]); }
-    finally{ setSchedLoading(false); }
+    setViewRoom(room); setSchedule([]); setSchedLoading(true);
+    try{ const r = await api.get('/office/room-schedule',{params:{room_id:room.id}}); setSchedule(r.data||[]); }
+    catch(_){ setSchedule([]); } finally{ setSchedLoading(false); }
   };
 
-  // Build grid: grid[day][slot] = entry | null
   const buildGrid = () => {
     const grid = {};
     DAYS.forEach(d=>{ grid[d]={}; SLOTS.forEach(s=>{ grid[d][s.id]=null; }); });
-    schedule.forEach(e=>{
-      const day = e.day?.trim();
-      const sl  = parseInt(e.time_slot);
-      if(grid[day]!==undefined) grid[day][sl] = e;
-    });
+    schedule.forEach(e=>{ const day=e.day?.trim(); const sl=parseInt(e.time_slot); if(grid[day]!==undefined) grid[day][sl]=e; });
     return grid;
   };
   const grid = viewRoom ? buildGrid() : {};
 
   const typeColor = t => ({ classroom:'#2d4a5a', lab:'#1a7a8a', auditorium:'#5a4a8a' }[t]||'#2d4a5a');
-  const TypeIcon  = ({ type, size=16, color='white' }) => {
-    if(type==='lab') return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 3h6M9 3v7L4 20h16L15 10V3"/><line x1="9" y1="14" x2="15" y2="14"/>
-      </svg>
-    );
-    if(type==='auditorium') return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M2 20h20M4 20V10l8-7 8 7v10"/><rect x="9" y="14" width="6" height="6"/>
-      </svg>
-    );
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
-      </svg>
-    );
+  const TypeIcon = ({ type, size=16, color='white' }) => {
+    if(type==='lab') return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3h6M9 3v7L4 20h16L15 10V3"/><line x1="9" y1="14" x2="15" y2="14"/></svg>;
+    if(type==='auditorium') return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 20h20M4 20V10l8-7 8 7v10"/><rect x="9" y="14" width="6" height="6"/></svg>;
+    return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>;
   };
 
   return (
     <div>
-      {/* ── Add Form ── */}
       <div style={card}>
-        <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}>
-          <Plus size={15}/> Add New Classroom
-        </div>
+        <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Classroom</div>
         {m&&<div style={msg(m.ok)}>{m.ok?<Check size={13}/>:<X size={13}/>} {m.text}</div>}
         <form onSubmit={handleAdd}>
           <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px',marginBottom:'14px' }}>
@@ -1079,68 +1064,44 @@ function ClassroomTab() {
             <div><label style={fl}>Capacity *</label><input style={fi} type="number" placeholder="60" value={form.capacity} onChange={e=>setForm(f=>({...f,capacity:parseInt(e.target.value)}))} required/></div>
             <div><label style={fl}>Type</label>
               <select style={fi} value={form.room_type} onChange={e=>setForm(f=>({...f,room_type:e.target.value}))}>
-                <option value="classroom">Classroom</option>
-                <option value="lab">Lab</option>
-                <option value="auditorium">Auditorium</option>
+                <option value="classroom">Classroom</option><option value="lab">Lab</option><option value="auditorium">Auditorium</option>
               </select>
             </div>
           </div>
-          <button type="submit" style={btn}><Plus size={13}/> Add Classroom</button>
+          <button type="submit" style={btn}> Add Classroom</button>
         </form>
       </div>
 
-      {/* ── Room Cards ── */}
       <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px' }}>
-        <Building2 size={14}/> Classroom Status
-        <span style={{ fontSize:'11px',color:'#7a9aaa',fontWeight:'400' }}>— click a room to view its timetable</span>
+        <Building2 size={14}/> Classroom Status <span style={{ fontSize:'11px',color:'#7a9aaa',fontWeight:'400' }}>— click a room to view its timetable</span>
       </div>
       <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:'12px' }}>
         {rooms.map(r=>(
-          <div key={r.id}
-            style={{ background:'white',border:`1.5px solid ${editId===r.id?'#2d4a5a':'#c8d8e0'}`,borderRadius:'10px',padding:'14px',transition:'all 0.15s',cursor: editId===r.id?'default':'pointer' }}
+          <div key={r.id} style={{ background:'white',border:`1.5px solid ${editId===r.id?'#2d4a5a':'#c8d8e0'}`,borderRadius:'10px',padding:'14px',transition:'all 0.15s',cursor:editId===r.id?'default':'pointer' }}
             onClick={()=>{ if(editId!==r.id) openModal(r); }}>
             {editId===r.id?(
               <div onClick={e=>e.stopPropagation()}>
-                <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px' }}>
-                  <Pencil size={12}/> {r.room_id}
-                </div>
-                <div style={{ marginBottom:'8px' }}>
-                  <label style={fl}>Capacity</label>
-                  <input style={fi} type="number" value={editForm.capacity} onChange={e=>setEditForm(f=>({...f,capacity:parseInt(e.target.value)}))}/>
-                </div>
-                <div style={{ marginBottom:'12px' }}>
-                  <label style={fl}>Type</label>
+                <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px' }}><Pencil size={12}/> {r.room_id}</div>
+                <div style={{ marginBottom:'8px' }}><label style={fl}>Capacity</label><input style={fi} type="number" value={editForm.capacity} onChange={e=>setEditForm(f=>({...f,capacity:parseInt(e.target.value)}))}/></div>
+                <div style={{ marginBottom:'12px' }}><label style={fl}>Type</label>
                   <select style={fi} value={editForm.room_type} onChange={e=>setEditForm(f=>({...f,room_type:e.target.value}))}>
-                    <option value="classroom">Classroom</option>
-                    <option value="lab">Lab</option>
-                    <option value="auditorium">Auditorium</option>
+                    <option value="classroom">Classroom</option><option value="lab">Lab</option><option value="auditorium">Auditorium</option>
                   </select>
                 </div>
                 <div style={{ display:'flex',gap:'6px' }}>
-                  <button onClick={()=>handleUpd(r.id)} style={{ flex:1,background:'#16a34a',color:'white',border:'none',padding:'7px',borderRadius:'6px',fontSize:'11px',fontWeight:'700',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'4px' }}>
-                    <Check size={11}/> Save
-                  </button>
-                  <button onClick={()=>setEditId(null)} style={{ background:'#f0f4f7',color:'#5a7080',border:'1px solid #dde3e8',padding:'7px 10px',borderRadius:'6px',fontSize:'11px',cursor:'pointer',display:'flex',alignItems:'center' }}>
-                    <X size={11}/>
-                  </button>
+                  <button onClick={()=>handleUpd(r.id)} style={{ flex:1,background:'#16a34a',color:'white',border:'none',padding:'7px',borderRadius:'6px',fontSize:'11px',fontWeight:'700',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'4px' }}><Check size={11}/> Save</button>
+                  <button onClick={()=>setEditId(null)} style={{ background:'#f0f4f7',color:'#5a7080',border:'1px solid #dde3e8',padding:'7px 10px',borderRadius:'6px',fontSize:'11px',cursor:'pointer',display:'flex',alignItems:'center' }}><X size={11}/></button>
                 </div>
               </div>
             ):(
               <>
                 <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px' }}>
                   <div style={{ fontSize:'15px',fontWeight:'800',color:'#1a2e3a' }}>{r.room_id}</div>
-                  <div style={{ width:'24px',height:'24px',background:'#f0f6fa',borderRadius:'6px',display:'flex',alignItems:'center',justifyContent:'center' }}>
-                    <TypeIcon type={r.room_type} size={13} color="#2d4a5a"/>
-                  </div>
+                  <div style={{ width:'24px',height:'24px',background:'#f0f6fa',borderRadius:'6px',display:'flex',alignItems:'center',justifyContent:'center' }}><TypeIcon type={r.room_type} size={13} color="#2d4a5a"/></div>
                 </div>
-                <div style={{ fontSize:'11px',color:'#5a7080',marginBottom:'2px' }}>
-                  Capacity: <strong style={{ color:'#1a2e3a' }}>{r.capacity}</strong>
-                </div>
-                <div style={{ fontSize:'11px',color:'#5a7080',marginBottom:'12px',textTransform:'capitalize' }}>
-                  Type: <strong style={{ color:'#1a2e3a' }}>{r.room_type}</strong>
-                </div>
-                <button
-                  onClick={e=>{ e.stopPropagation(); setEditId(r.id); setEditForm({capacity:r.capacity,room_type:r.room_type}); }}
+                <div style={{ fontSize:'11px',color:'#5a7080',marginBottom:'2px' }}>Capacity: <strong style={{ color:'#1a2e3a' }}>{r.capacity}</strong></div>
+                <div style={{ fontSize:'11px',color:'#5a7080',marginBottom:'12px',textTransform:'capitalize' }}>Type: <strong style={{ color:'#1a2e3a' }}>{r.room_type}</strong></div>
+                <button onClick={e=>{ e.stopPropagation(); setEditId(r.id); setEditForm({capacity:r.capacity,room_type:r.room_type}); }}
                   style={{ width:'100%',background:'#2d4a5a',color:'white',border:'none',padding:'7px',borderRadius:'6px',fontSize:'11px',fontWeight:'700',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'5px' }}>
                   <Pencil size={11}/> Edit
                 </button>
@@ -1148,106 +1109,47 @@ function ClassroomTab() {
             )}
           </div>
         ))}
-        {rooms.length===0&&(
-          <div style={{ gridColumn:'1/-1',padding:'28px',textAlign:'center',color:'#aabbc8',fontSize:'12px' }}>No rooms found.</div>
-        )}
+        {rooms.length===0&&<div style={{ gridColumn:'1/-1',padding:'28px',textAlign:'center',color:'#aabbc8',fontSize:'12px' }}>No rooms found.</div>}
       </div>
 
-      {/* ── Timetable Modal ── */}
       {viewRoom&&(
         <>
-          {/* Backdrop */}
-          <div onClick={()=>setViewRoom(null)}
-            style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:200,backdropFilter:'blur(2px)' }}/>
-
-          {/* Modal */}
-          <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',zIndex:201,
-            width:'min(860px,96vw)',maxHeight:'88vh',display:'flex',flexDirection:'column',
-            background:'white',borderRadius:'16px',boxShadow:'0 20px 60px rgba(0,0,0,0.22)',overflow:'hidden' }}>
-
-            {/* Header */}
+          <div onClick={()=>setViewRoom(null)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:200,backdropFilter:'blur(2px)' }}/>
+          <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',zIndex:201,width:'min(860px,96vw)',maxHeight:'88vh',display:'flex',flexDirection:'column',background:'white',borderRadius:'16px',boxShadow:'0 20px 60px rgba(0,0,0,0.22)',overflow:'hidden' }}>
             <div style={{ background:`linear-gradient(135deg,${typeColor(viewRoom.room_type)},#3a6070)`,padding:'18px 24px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0 }}>
               <div style={{ display:'flex',alignItems:'center',gap:'12px' }}>
-                <div style={{ width:'40px',height:'40px',background:'rgba(255,255,255,0.15)',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center' }}>
-                  <TypeIcon type={viewRoom.room_type} size={20} color="white"/>
-                </div>
+                <div style={{ width:'40px',height:'40px',background:'rgba(255,255,255,0.15)',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center' }}><TypeIcon type={viewRoom.room_type} size={20} color="white"/></div>
                 <div>
                   <div style={{ fontSize:'17px',fontWeight:'700',color:'white' }}>{viewRoom.room_id}</div>
-                  <div style={{ fontSize:'11px',color:'rgba(255,255,255,0.6)',marginTop:'2px',textTransform:'capitalize' }}>
-                    {viewRoom.room_type} · Capacity {viewRoom.capacity}
-                  </div>
+                  <div style={{ fontSize:'11px',color:'rgba(255,255,255,0.6)',marginTop:'2px',textTransform:'capitalize' }}>{viewRoom.room_type} · Capacity {viewRoom.capacity}</div>
                 </div>
               </div>
-              <button onClick={()=>setViewRoom(null)}
-                style={{ background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.25)',color:'white',borderRadius:'8px',width:'32px',height:'32px',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0 }}>
-                <X size={15}/>
-              </button>
+              <button onClick={()=>setViewRoom(null)} style={{ background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.25)',color:'white',borderRadius:'8px',width:'32px',height:'32px',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0 }}><X size={15}/></button>
             </div>
-
-            {/* Body */}
             <div style={{ flex:1,overflowY:'auto',padding:'20px 24px' }}>
-              {schedLoading?(
-                <div style={{ textAlign:'center',padding:'40px',color:'#aabbc8',fontSize:'13px' }}>Loading timetable...</div>
-              ): schedule.length===0?(
-                <div style={{ textAlign:'center',padding:'40px',color:'#aabbc8' }}>
-                  <div style={{ width:'48px',height:'48px',background:'#f0f4f7',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px' }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#aabbc8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/>
-                    </svg>
-                  </div>
-                  <div style={{ fontSize:'14px',fontWeight:'600',marginBottom:'4px',color:'#5a7080' }}>No classes scheduled</div>
-                  <div style={{ fontSize:'12px' }}>This room has no timetable entries yet.</div>
-                </div>
-              ):(
+              {schedLoading?<div style={{ textAlign:'center',padding:'40px',color:'#aabbc8',fontSize:'13px' }}>Loading timetable...</div>
+              :schedule.length===0?<div style={{ textAlign:'center',padding:'40px',color:'#aabbc8' }}><div style={{ fontSize:'14px',fontWeight:'600',marginBottom:'4px',color:'#5a7080' }}>No classes scheduled</div><div style={{ fontSize:'12px' }}>This room has no timetable entries yet.</div></div>
+              :(
                 <div style={{ overflowX:'auto' }}>
                   <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px',minWidth:'600px' }}>
-                    <thead>
-                      <tr>
-                        <th style={{ padding:'10px 12px',background:'#f8fafc',border:'1px solid #e0e8ed',fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',width:'110px',textAlign:'left' }}>
-                          Time
-                        </th>
-                        {DAYS.map(d=>(
-                          <th key={d} style={{ padding:'10px 12px',background:'#2d4a5a',color:'white',border:'1px solid #2d4a5a',fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px',textAlign:'center' }}>
-                            {d.slice(0,3)}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
+                    <thead><tr>
+                      <th style={{ padding:'10px 12px',background:'#f8fafc',border:'1px solid #e0e8ed',fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',width:'110px',textAlign:'left' }}>Time</th>
+                      {DAYS.map(d=><th key={d} style={{ padding:'10px 12px',background:'#2d4a5a',color:'white',border:'1px solid #2d4a5a',fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px',textAlign:'center' }}>{d.slice(0,3)}</th>)}
+                    </tr></thead>
                     <tbody>
                       {SLOTS.map(slot=>(
                         <tr key={slot.id}>
-                          <td style={{ padding:'10px 12px',background:'#f8fafc',border:'1px solid #e0e8ed',fontWeight:'600',color:'#5a7080',fontSize:'11px',whiteSpace:'nowrap' }}>
-                            {slot.label}
-                          </td>
-                          {DAYS.map(day=>{
-                            const entry = grid[day]?.[slot.id];
-                            return (
-                              <td key={day} style={{ padding:'6px',border:'1px solid #e0e8ed',verticalAlign:'top',background: entry ? '#f0f6fa' : 'white',minWidth:'110px' }}>
-                                {entry?(
-                                  <div style={{ background:'#2d4a5a',borderRadius:'7px',padding:'7px 9px',color:'white' }}>
-                                    <div style={{ fontSize:'11px',fontWeight:'700',marginBottom:'3px',lineHeight:1.2 }}>
-                                      {entry.short_name||entry.subject_name}
-                                    </div>
-                                    <div style={{ fontSize:'10px',color:'rgba(255,255,255,0.7)',marginBottom:'2px' }}>
-                                      {entry.batch_name}
-                                    </div>
-                                    {entry.teacher_name&&(
-                                      <div style={{ fontSize:'9px',color:'rgba(255,255,255,0.55)' }}>
-                                        {entry.teacher_name}
-                                      </div>
-                                    )}
-                                    {entry.is_lab&&(
-                                      <span style={{ background:'rgba(255,255,255,0.18)',borderRadius:'3px',padding:'1px 5px',fontSize:'8px',fontWeight:'700',marginTop:'4px',display:'inline-block' }}>LAB</span>
-                                    )}
-                                  </div>
-                                ):(
-                                  <div style={{ height:'52px',display:'flex',alignItems:'center',justifyContent:'center' }}>
-                                    <div style={{ width:'16px',height:'1px',background:'#e8edf0' }}/>
-                                  </div>
-                                )}
-                              </td>
-                            );
-                          })}
+                          <td style={{ padding:'10px 12px',background:'#f8fafc',border:'1px solid #e0e8ed',fontWeight:'600',color:'#5a7080',fontSize:'11px',whiteSpace:'nowrap' }}>{slot.label}</td>
+                          {DAYS.map(day=>{ const entry=grid[day]?.[slot.id]; return (
+                            <td key={day} style={{ padding:'6px',border:'1px solid #e0e8ed',verticalAlign:'top',background:entry?'#f0f6fa':'white',minWidth:'110px' }}>
+                              {entry?(<div style={{ background:'#2d4a5a',borderRadius:'7px',padding:'7px 9px',color:'white' }}>
+                                <div style={{ fontSize:'11px',fontWeight:'700',marginBottom:'3px',lineHeight:1.2 }}>{entry.short_name||entry.subject_name}</div>
+                                <div style={{ fontSize:'10px',color:'rgba(255,255,255,0.7)',marginBottom:'2px' }}>{entry.batch_name}</div>
+                                {entry.teacher_name&&<div style={{ fontSize:'9px',color:'rgba(255,255,255,0.55)' }}>{entry.teacher_name}</div>}
+                                {entry.is_lab&&<span style={{ background:'rgba(255,255,255,0.18)',borderRadius:'3px',padding:'1px 5px',fontSize:'8px',fontWeight:'700',marginTop:'4px',display:'inline-block' }}>LAB</span>}
+                              </div>):(<div style={{ height:'52px',display:'flex',alignItems:'center',justifyContent:'center' }}><div style={{ width:'16px',height:'1px',background:'#e8edf0' }}/></div>)}
+                            </td>
+                          ); })}
                         </tr>
                       ))}
                     </tbody>
@@ -1255,16 +1157,9 @@ function ClassroomTab() {
                 </div>
               )}
             </div>
-
-            {/* Footer */}
             <div style={{ padding:'12px 24px',borderTop:'1px solid #e8edf0',background:'white',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0 }}>
-              <div style={{ fontSize:'11px',color:'#7a9aaa' }}>
-                {schedule.length} class{schedule.length!==1?'es':''} scheduled in this room
-              </div>
-              <button onClick={()=>setViewRoom(null)}
-                style={{ padding:'7px 20px',border:'1px solid #dde3e8',borderRadius:'7px',background:'white',color:'#5a7080',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit' }}>
-                Close
-              </button>
+              <div style={{ fontSize:'11px',color:'#7a9aaa' }}>{schedule.length} class{schedule.length!==1?'es':''} scheduled in this room</div>
+              <button onClick={()=>setViewRoom(null)} style={{ padding:'7px 20px',border:'1px solid #dde3e8',borderRadius:'7px',background:'white',color:'#5a7080',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit' }}>Close</button>
             </div>
           </div>
         </>
@@ -1299,11 +1194,8 @@ function EnrollmentTab() {
   useEffect(()=>{ loadStudents(); },[filterBatch]);
 
   const handleEditSave = async()=>{
-    try{
-      await api.put(`/enrollment/${editStu.id}`,editForm);
-      setEditStu(null); loadStudents();
-      showMsg(true,'Student updated.');
-    }catch(err){ showMsg(false,err.response?.data?.message||'Error'); }
+    try{ await api.put(`/enrollment/${editStu.id}`,editForm); setEditStu(null); loadStudents(); showMsg(true,'Student updated.'); }
+    catch(err){ showMsg(false,err.response?.data?.message||'Error'); }
   };
 
   const filtered = students.filter(s=>
@@ -1320,7 +1212,7 @@ function EnrollmentTab() {
           <button key={id} onClick={()=>setSubTab(id)} style={{ padding:'7px 18px',border:'none',borderRadius:'6px',fontFamily:'inherit',fontSize:'12px',fontWeight:subTab===id?'700':'500',cursor:'pointer',background:subTab===id?'white':'transparent',color:subTab===id?'#1a2e3a':'#5a7080',boxShadow:subTab===id?'0 1px 4px rgba(0,0,0,0.08)':'none' }}>{label}</button>
         ))}
       </div>
-      {subTab==='manual'&&<div style={card}><div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'14px',display:'flex',alignItems:'center',gap:'7px' }}><Plus size={14}/> Add Student</div><EnrollManual batches={batches} depts={depts} onSuccess={()=>{ showMsg(true,'Student enrolled.'); loadStudents(); }} onError={t=>showMsg(false,t)}/></div>}
+      {subTab==='manual'&&<div style={card}><div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'14px',display:'flex',alignItems:'center',gap:'7px' }}> Add Student</div><EnrollManual batches={batches} depts={depts} onSuccess={()=>{ showMsg(true,'Student enrolled.'); loadStudents(); }} onError={t=>showMsg(false,t)}/></div>}
       {subTab==='bulk'&&<EnrollBulk batches={batches} onSuccess={(r,bid)=>{ showMsg(true,r); loadStudents(bid||''); }} onError={t=>showMsg(false,t)}/>}
 
       {editStu&&(
@@ -1415,17 +1307,10 @@ function EnrollBulk({ batches, onSuccess, onError }) {
   const handleFile=f=>{ if(!f)return; const ext=f.name.split('.').pop().toLowerCase(); if(!['csv','xlsx','xls'].includes(ext)){onError('Only CSV, XLSX or XLS files.');return;} setFile(f);setResult(null); };
   const downloadTemplate=()=>{ const csv='first_name,last_name,email,student_id,department\nFatima,Khan,fatima@juw.edu.pk,STU2025001,Computer Science\n'; const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');a.href=url;a.download='students_template.csv';a.click();URL.revokeObjectURL(url); };
   const handleUpload=async()=>{
-    if(!file){onError('Select a file.');return;}
-    if(!batchId){onError('Select a batch.');return;}
+    if(!file){onError('Select a file.');return;} if(!batchId){onError('Select a batch.');return;}
     setLoading(true); setResult(null);
-    try{
-      const fd=new FormData(); fd.append('file',file); fd.append('batch_id',batchId);
-      const res=await api.post('/enrollment/bulk',fd,{headers:{'Content-Type':'multipart/form-data'}});
-      setResult(res.data); setFile(null);
-      if(fileRef.current) fileRef.current.value='';
-      onSuccess(`Enrolled ${res.data.enrolled} of ${res.data.total} students.`, batchId);
-    }catch(err){ onError(err.response?.data?.message||'Upload failed.'); }
-    finally{ setLoading(false); }
+    try{ const fd=new FormData(); fd.append('file',file); fd.append('batch_id',batchId); const res=await api.post('/enrollment/bulk',fd,{headers:{'Content-Type':'multipart/form-data'}}); setResult(res.data); setFile(null); if(fileRef.current) fileRef.current.value=''; onSuccess(`Enrolled ${res.data.enrolled} of ${res.data.total} students.`, batchId); }
+    catch(err){ onError(err.response?.data?.message||'Upload failed.'); } finally{ setLoading(false); }
   };
   return (
     <div style={card}>
@@ -1439,7 +1324,6 @@ function EnrollBulk({ batches, onSuccess, onError }) {
           <div style={{ marginBottom:'12px' }}><label style={fl}>Select Batch</label><select style={fi} value={batchId} onChange={e=>setBatchId(e.target.value)}><option value="">Select Batch</option>{batches.map(b=><option key={b.id} value={b.id}>{b.batch_name}</option>)}</select></div>
           <div onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={e=>{e.preventDefault();setDragOver(false);handleFile(e.dataTransfer.files[0]);}} onClick={()=>fileRef.current?.click()}
             style={{ border:`2px dashed ${dragOver?'#2d4a5a':'#c8d8e0'}`,borderRadius:'8px',padding:'20px',textAlign:'center',cursor:'pointer',background:dragOver?'#e8f4fd':'#f8fafc',marginBottom:'12px' }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8fa5b0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin:'0 auto 8px',display:'block' }}><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
             {file?<div><div style={{ fontSize:'12px',fontWeight:'700',color:'#16a34a' }}>{file.name}</div><div style={{ fontSize:'10px',color:'#7a9aaa' }}>{(file.size/1024).toFixed(1)} KB</div></div>:<div><div style={{ fontSize:'12px',fontWeight:'600',color:'#2d4a5a' }}>Drop file or click to browse</div><div style={{ fontSize:'10px',color:'#8fa5b0',marginTop:'3px' }}>.xlsx .xls .csv</div></div>}
             <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" style={{ display:'none' }} onChange={e=>handleFile(e.target.files[0])}/>
           </div>
