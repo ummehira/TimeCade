@@ -7,6 +7,7 @@ import { useResponsive } from '../../hooks/useResponsive';
 import { useAuth } from '../../context/AuthContext';
 import NotificationBell from '../../components/common/NotificationBell';
 import api from '../../utils/api';
+import ExportButtons from '../../components/common/ExportButtons';
 
 const DAYS  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const SLOTS = [
@@ -236,21 +237,41 @@ function StudentHome() {
 }
 
 // Timetable Page
+// ── Student Timetable (with export) ──────────────────────────────────────
+// Replace the existing StudentTimetable function in StudentDashboard.js with this.
+// Also add this import at the top of StudentDashboard.js:
+//   import ExportButtons from '../../components/common/ExportButtons';
+
 function StudentTimetable() {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
   const today = new Date().toLocaleDateString('en-US',{ weekday:'long' });
 
   useEffect(()=>{
     api.get('/timetable').then(r=>setEntries(r.data)).finally(()=>setLoading(false));
   },[]);
 
+  const batchName    = entries[0]?.batch_name || 'My Batch';
+  const exportTitle  = `${batchName} Timetable`;
+  const exportSub    = `${user?.full_name || 'Student'} · CS & SE Department`;
+
   return (
     <div className="page-content">
       <div className="card">
         <div className="card-header">
           <h2 style={{ display:'flex',alignItems:'center',gap:'8px' }}><Calendar size={15}/> My Weekly Timetable</h2>
-          <span style={{ fontSize:'12px',color:'#aabbc8',fontWeight:'500' }}>View only</span>
+          <div style={{ display:'flex',alignItems:'center',gap:'12px' }}>
+            <span style={{ fontSize:'12px',color:'#aabbc8',fontWeight:'500' }}>View only</span>
+            <ExportButtons
+              entries={entries}
+              title={exportTitle}
+              subtitle={exportSub}
+              filename={`${batchName.replace(/\s+/g,'_')}_Timetable`}
+              size="sm"
+              disabled={loading}
+            />
+          </div>
         </div>
         <div className="card-body" style={{ padding:'14px',overflowX:'auto' }}>
           {loading?(
@@ -269,7 +290,6 @@ function StudentTimetable() {
                 {DAYS.map(day=>{
                   const dayEntries = entries.filter(e=>e.day===day);
                   const isToday    = day===today;
-                  // Build cells — lab slots span 3 columns (3 hours)
                   const cells = [];
                   let skip = 0;
                   SLOTS.forEach(slot=>{

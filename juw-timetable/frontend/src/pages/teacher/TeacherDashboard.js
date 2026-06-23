@@ -9,6 +9,8 @@ import NotificationBell from '../../components/common/NotificationBell';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import TopHeader from '../../components/common/TopHeader';
+import ExportButtons from '../../components/common/ExportButtons';
+
 
 const DAYS  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const SLOTS = [
@@ -368,16 +370,25 @@ function TeacherHome() {
 }
 
 // ── My Schedule ───────────────────────────────────────────────────────────
+// ── My Schedule (with export) ─────────────────────────────────────────────
+// Replace the existing TeacherSchedulePage function in TeacherDashboard.js with this.
+// Also add this import at the top of TeacherDashboard.js:
+//   import ExportButtons from '../../components/common/ExportButtons';
+
 function TeacherSchedulePage() {
   const { isMobile } = useResponsive();
   const [entries,setEntries]               = useState([]);
   const [loading,setLoading]               = useState(true);
   const [rescheduleEntry,setRescheduleEntry] = useState(null);
   const [toast,setToast]                   = useState('');
+  const { user } = useAuth();
   const showToast = msg=>{ setToast(msg); setTimeout(()=>setToast(''),3500); };
 
   useEffect(()=>{ api.get('/timetable').then(r=>setEntries(r.data)).finally(()=>setLoading(false)); },[]);
   const handleReschedule=async(e,d,s,n)=>{ const m=await submitReschedule(e,d,s,n); showToast(m); };
+
+  const exportTitle    = `${user?.full_name || 'Teacher'} — My Schedule`;
+  const exportSubtitle = `CS & SE Department · Generated ${new Date().toLocaleDateString('en-PK')}`;
 
   return (
     <div className="page-content" style={{ padding:isMobile?'12px':'20px' }}>
@@ -386,7 +397,17 @@ function TeacherSchedulePage() {
       <div className="card" style={{ marginBottom:'18px' }}>
         <div className="card-header">
           <h2 style={{ display:'flex',alignItems:'center',gap:'8px' }}><Calendar size={15}/> My Weekly Schedule</h2>
-          <span style={{ fontSize:'12px',color:'#aabbc8' }}>Click Reschedule to request changes</span>
+          <div style={{ display:'flex',alignItems:'center',gap:'12px' }}>
+            <span style={{ fontSize:'12px',color:'#aabbc8' }}>Click Reschedule to request changes</span>
+            <ExportButtons
+              entries={entries}
+              title={exportTitle}
+              subtitle={exportSubtitle}
+              filename={`My_Schedule_${(user?.full_name||'Teacher').replace(/\s+/g,'_')}`}
+              size="sm"
+              disabled={loading}
+            />
+          </div>
         </div>
         <div className="card-body" style={{ padding:'14px' }}>
           {loading?<div style={{ textAlign:'center',padding:'32px' }}><div className="spinner" style={{ margin:'0 auto' }}></div></div>:
@@ -420,7 +441,9 @@ function TeacherSchedulePage() {
   );
 }
 
-// ── Batch Timetable Page ──────────────────────────────────────────────────
+// ── Batch Timetable Page (with export) ────────────────────────────────────
+// Replace the existing AllBatchesPage function in TeacherDashboard.js with this.
+
 function AllBatchesPage() {
   const { isMobile } = useResponsive();
   const [batches,     setBatches]     = useState([]);
@@ -429,9 +452,7 @@ function AllBatchesPage() {
   const [entries,     setEntries]     = useState([]);
   const [loading,     setLoading]     = useState(false);
 
-  useEffect(()=>{
-    api.get('/office/batches').then(r=>{ setBatches(r.data); });
-  },[]);
+  useEffect(()=>{ api.get('/office/batches').then(r=>{ setBatches(r.data); }); },[]);
 
   useEffect(()=>{
     if(!selBatch) return;
@@ -448,7 +469,19 @@ function AllBatchesPage() {
   return (
     <div className="page-content" style={{ padding:isMobile?'12px':'20px' }}>
       <div className="card">
-        <div className="card-header"><h2 style={{ display:'flex',alignItems:'center',gap:'8px' }}><Users size={15}/> Batch Timetable</h2></div>
+        <div className="card-header">
+          <h2 style={{ display:'flex',alignItems:'center',gap:'8px' }}><Users size={15}/> Batch Timetable</h2>
+          {selBatchObj&&entries.length>0&&(
+            <ExportButtons
+              entries={entries}
+              title={selBatchObj.batch_name}
+              subtitle={`Session ${selSemester} · CS & SE Department`}
+              filename={`${selBatchObj.batch_name}_Session${selSemester}`}
+              size="sm"
+              disabled={loading}
+            />
+          )}
+        </div>
         <div className="card-body">
           <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'14px',marginBottom:'20px' }}>
             <div>

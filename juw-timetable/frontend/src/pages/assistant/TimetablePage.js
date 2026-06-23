@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../utils/api';
 import { useResponsive } from '../../hooks/useResponsive';
 import SearchSelect from '../../components/common/SearchSelect';
+import ExportButtons from '../../components/common/ExportButtons';
 
 const DAYS  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const SLOTS = [
@@ -658,11 +659,19 @@ export default function TimetablePage({ canEdit=false }) {
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2d4a5a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
               <span style={{ fontSize:'12px',fontWeight:'700',color:'#1a2e3a' }}>Timetable Filters</span>
               <div style={{ flex:1,height:'1px',background:'#e0e8ed',marginLeft:'4px' }}/>
-              {selBatch&&selBatchObj&&(
-                <span style={{ fontSize:'11px',color:'#7a9aaa',background:'#f0f4f7',padding:'3px 10px',borderRadius:'10px' }}>
-                  {selBatchObj.batch_name}{selSemester ? ` · Session ${selSemester}` : ''} · {entries.length} class{entries.length!==1?'es':''}
-                </span>
-              )}
+              {selBatch&&selBatchObj&&(<div style={{ display:'flex',alignItems:'center',gap:'10px' }}>
+                      <span style={{ fontSize:'11px',color:'#7a9aaa',background:'#f0f4f7',padding:'3px 10px',borderRadius:'10px' }}>
+                        {selBatchObj.batch_name}{selSemester ? ` · Session ${selSemester}` : ''} · {entries.length} class{entries.length!==1?'es':''}
+                      </span>
+                      <ExportButtons
+                        entries={displayEntries}
+                        title={selBatchObj.batch_name}
+                        subtitle={`Session ${selSemester || 1} · CS & SE Department`}
+                        filename={`${selBatchObj.batch_name}_Session${selSemester || 1}`}
+                        size="sm"
+                      />
+                    </div>
+                  )} 
             </div>
 
             {/* Filter dropdowns */}
