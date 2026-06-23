@@ -58,10 +58,8 @@ router.put('/batches/:id', authenticate, canEdit, async (req, res) => {
   } catch (err) { res.status(500).json({ message: 'Server error.' }); }
 });
 
-// DELETE /api/office/batches/:id
 router.delete('/batches/:id', authenticate, canEdit, async (req, res) => {
   try {
-    // Remove related records first
     await pool.query('DELETE FROM batch_subjects WHERE batch_id=$1', [req.params.id]);
     await pool.query('DELETE FROM timetable WHERE batch_id=$1', [req.params.id]);
     const r = await pool.query('DELETE FROM batches WHERE id=$1 RETURNING *', [req.params.id]);
@@ -133,6 +131,37 @@ router.put('/teachers/:id', authenticate, canEdit, async (req, res) => {
   } catch (err) { res.status(500).json({ message: 'Server error.' }); }
 });
 
+// ── DELETE /api/office/teachers/:id ──────────────────────────────────────
+router.delete('/teachers/:id', authenticate, canEdit, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get user_id before deleting teacher record
+    const teacherRes = await pool.query('SELECT user_id FROM teachers WHERE id=$1', [id]);
+    if (!teacherRes.rows.length) return res.status(404).json({ message: 'Teacher not found.' });
+    const userId = teacherRes.rows[0].user_id;
+
+    // Remove teacher's course assignments
+    await pool.query('DELETE FROM teacher_subjects WHERE teacher_id=$1', [id]);
+
+    // Nullify timetable entries (keep the class, just remove the teacher reference)
+    await pool.query('UPDATE timetable SET teacher_id=NULL WHERE teacher_id=$1', [id]);
+
+    // Delete teacher record
+    await pool.query('DELETE FROM teachers WHERE id=$1', [id]);
+
+    // Delete the linked user account
+    if (userId) {
+      await pool.query('DELETE FROM users WHERE id=$1', [userId]);
+    }
+
+    res.json({ message: 'Teacher deleted.' });
+  } catch (err) {
+    console.error('deleteTeacher:', err);
+    res.status(500).json({ message: 'Server error: ' + err.message });
+  }
+});
+
 // ── Subjects ──────────────────────────────────────────────────────────────
 router.get('/subjects', authenticate, async (req, res) => {
   try {
@@ -159,7 +188,6 @@ router.post('/subjects', authenticate, canEdit, async (req, res) => {
   try {
     const { code, name, short_name, credit_hours, department_id, has_lab, credit_format } = req.body;
     if (!name) return res.status(400).json({ message: 'name is required.' });
-    // Validate course code format: 3 uppercase letters, space, 4 digits (e.g. CFG 4123)
     if (code && !/^[A-Z]{3} \d{4}$/.test(code)) {
       return res.status(400).json({ message: 'Invalid course code format. Must be 3 uppercase letters, a space, then 4 digits (e.g. CFG 4123).' });
     }
@@ -179,7 +207,6 @@ router.put('/subjects/:id', authenticate, canEdit, async (req, res) => {
   try {
     const { code, name, short_name, credit_hours, department_id, has_lab, credit_format } = req.body;
     if (!name) return res.status(400).json({ message: 'name is required.' });
-    // Validate code format only if a new code is supplied and it differs from current
     if (code) {
       const existing = await pool.query('SELECT code FROM subjects WHERE id=$1', [req.params.id]);
       const currentCode = existing.rows[0]?.code;
@@ -200,7 +227,6 @@ router.put('/subjects/:id', authenticate, canEdit, async (req, res) => {
   }
 });
 
-// DELETE /api/office/subjects/:id
 router.delete('/subjects/:id', authenticate, canEdit, async (req, res) => {
   try {
     await pool.query('DELETE FROM batch_subjects WHERE subject_id=$1',   [req.params.id]);
@@ -292,13 +318,11 @@ router.get('/room-schedule', authenticate, async (req, res) => {
   }
 });
 
-// ── Batch Timetable (bypasses role filter — for teacher views) ────────────
+// ── Batch Timetable ───────────────────────────────────────────────────────
 router.get('/batch-timetable', authenticate, async (req, res) => {
   try {
     const { batch_id, semester } = req.query;
     if (!batch_id) return res.status(400).json({ message: 'batch_id is required.' });
-
-    console.log('[batch-timetable] querying batch_id:', batch_id, 'semester:', semester);
 
     let whereClause = 'WHERE t.batch_id = $1';
     const params = [batch_id];
@@ -333,8 +357,6 @@ router.get('/batch-timetable', authenticate, async (req, res) => {
        END, t.time_slot::int`,
       params
     );
-
-    console.log('[batch-timetable] found rows:', result.rows.length, 'for batch_id:', batch_id);
     res.json(result.rows);
   } catch (err) {
     console.error('batchTimetable error:', err);

@@ -370,7 +370,7 @@ function BatchTab() {
                   </>
               }
             </div>
-            <button type="submit" style={btn}><Plus size={13}/> Add Batch</button>
+            <button type="submit" style={btn}> Add Batch</button>
           </form>
         </div>
       )}
@@ -672,7 +672,7 @@ function TeacherTab() {
               <SectionLabel count={selCourses.length}>Assign Courses to this Teacher</SectionLabel>
               <Checklist items={subjects} selected={selCourses} onToggle={toggle} labelKey="name" emptyText="No courses available"/>
             </div>
-            <button type="submit" style={btn}><Plus size={13}/> Add Teacher</button>
+            <button type="submit" style={btn}> Add Teacher</button>
           </form>
         </div>
       )}
@@ -805,7 +805,6 @@ function CourseTab() {
     e.preventDefault();
     const err = validateCode(form.code);
     if(err){ setCodeErr(err); return; }
-    if(selTeachers.length===0 && !isFYP(form)){ setM({ok:false,text:'Please assign at least one teacher to this course.'}); return; }
     try{
       if(!form.major_code){ setM({ok:false,text:'Please select a major for this course.'}); return; }
       const dept = depts.find(d=>d.code===form.major_code);
@@ -844,7 +843,6 @@ function CourseTab() {
     const codeChanged = editForm.code !== (editCourse.code||'');
     if(codeChanged){ const err = validateCode(editForm.code); if(err){ setEditCodeErr(err); return; } }
     const isFYPCourse = /fyp|final.year.project/i.test((editForm.name||editCourse.name)+' '+(editForm.code||editCourse.code));
-    if(editSelT.length===0 && !isFYPCourse){ setM({ok:false,text:'Please assign at least one teacher to this course.'}); setTimeout(()=>setM(null),3500); return; }
     try{
       const dept = editForm.major_code ? depts.find(d=>d.code===editForm.major_code) : null;
       const fmt = getCreditFormat(editForm.credit_format||'3+0');
@@ -1002,7 +1000,7 @@ function CourseTab() {
               )}
               <Checklist items={teachers} selected={selTeachers} onToggle={toggle} labelKey="full_name" emptyText="No teachers found"/>
             </div>
-            <button type="submit" style={btn}><Plus size={13}/> Add Course</button>
+            <button type="submit" style={btn}> Add Course</button>
           </form>
         </div>
       )}
@@ -1165,7 +1163,7 @@ function ClassroomTab() {
               </select>
             </div>
           </div>
-          <button type="submit" style={btn}><Plus size={13}/> Add Classroom</button>
+          <button type="submit" style={btn}> Add Classroom</button>
         </form>
       </div>
 
@@ -1337,7 +1335,7 @@ function EnrollmentTab() {
           <button key={id} onClick={()=>setSubTab(id)} style={{ padding:'7px 18px',border:'none',borderRadius:'6px',fontFamily:'inherit',fontSize:'12px',fontWeight:subTab===id?'700':'500',cursor:'pointer',background:subTab===id?'white':'transparent',color:subTab===id?'#1a2e3a':'#5a7080',boxShadow:subTab===id?'0 1px 4px rgba(0,0,0,0.08)':'none' }}>{label}</button>
         ))}
       </div>
-      {subTab==='manual'&&<div style={card}><div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'14px',display:'flex',alignItems:'center',gap:'7px' }}><Plus size={14}/> Add Student</div><EnrollManual batches={batches} depts={depts} onSuccess={()=>{ showMsg(true,'Student enrolled.'); loadStudents(); }} onError={t=>showMsg(false,t)}/></div>}
+      {subTab==='manual'&&<div style={card}><div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'14px',display:'flex',alignItems:'center',gap:'7px' }}> Add Student</div><EnrollManual batches={batches} depts={depts} onSuccess={()=>{ showMsg(true,'Student enrolled.'); loadStudents(); }} onError={t=>showMsg(false,t)}/></div>}
       {subTab==='bulk'&&<EnrollBulk batches={batches} onSuccess={(r,bid)=>{ showMsg(true,r); loadStudents(bid||''); }} onError={t=>showMsg(false,t)}/>}
 
       {editStu&&(
