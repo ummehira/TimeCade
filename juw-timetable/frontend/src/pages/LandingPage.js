@@ -437,7 +437,7 @@ export default function LandingPage() {
             <div style={S.aboutLabel}>About Timecade</div>
             <h2 style={S.aboutH2}>One platform,<br />four distinct roles</h2>
             <p style={S.aboutP}>
-              Every user gets exactly the view they need. Office Assistants control the schedule, Admins propose changes, Teachers track their sessions, and Students stay updated in real time.
+              Every user gets exactly the view they need. Admins control the full schedule, Teachers track their sessions, and Students stay updated in real time.
             </p>
             <Link to="/login" style={{ textDecoration: 'none' }}>
               <button style={S.aboutBtn}>Access Dashboard</button>
@@ -458,30 +458,27 @@ export default function LandingPage() {
               <text x="170" y="180" textAnchor="middle" fontSize="11" fontWeight="700" fill="#7a9aaa" fontFamily="'Plus Jakarta Sans', sans-serif">CADE</text>
 
               {/* Connector lines */}
+              {/* Top: Admin */}
               <line x1="170" y1="68"  x2="170" y2="128" stroke="#d0dde4" strokeWidth="0.8"/>
-              <line x1="302" y1="170" x2="248" y2="170" stroke="#d0dde4" strokeWidth="0.8"/>
-              <line x1="170" y1="272" x2="170" y2="212" stroke="#d0dde4" strokeWidth="0.8"/>
-              <line x1="38"  y1="170" x2="92"  y2="170" stroke="#d0dde4" strokeWidth="0.8"/>
+              {/* Bottom-left: Teacher */}
+              <line x1="170" y1="212" x2="55"  y2="275" stroke="#d0dde4" strokeWidth="0.8"/>
+              {/* Bottom-right: Student */}
+              <line x1="170" y1="212" x2="285" y2="275" stroke="#d0dde4" strokeWidth="0.8"/>
 
-              {/* Top: Office Assistant */}
-              <circle cx="170" cy="40" r="28" fill="#e1f5ee"/>
-              <text x="170" y="36" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#085041" fontFamily="'Plus Jakarta Sans', sans-serif">Office</text>
-              <text x="170" y="49" textAnchor="middle" fontSize="9"   fill="#0f6e56" fontFamily="'Plus Jakarta Sans', sans-serif">Assistant</text>
+              {/* Top: Admin */}
+              <circle cx="170" cy="40" r="28" fill="#e6f1fb"/>
+              <text x="170" y="36" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#0c447c" fontFamily="'Plus Jakarta Sans', sans-serif">Dept</text>
+              <text x="170" y="49" textAnchor="middle" fontSize="9"   fill="#185fa5" fontFamily="'Plus Jakarta Sans', sans-serif">Admin</text>
 
-              {/* Right: Admin */}
-              <circle cx="300" cy="170" r="28" fill="#e6f1fb"/>
-              <text x="300" y="166" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#0c447c" fontFamily="'Plus Jakarta Sans', sans-serif">Dept</text>
-              <text x="300" y="179" textAnchor="middle" fontSize="9"   fill="#185fa5" fontFamily="'Plus Jakarta Sans', sans-serif">Admin</text>
+              {/* Bottom-left: Teacher */}
+              <circle cx="55" cy="303" r="28" fill="#faeeda"/>
+              <text x="55" y="299" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#633806" fontFamily="'Plus Jakarta Sans', sans-serif">Teacher</text>
+              <text x="55" y="312" textAnchor="middle" fontSize="9"   fill="#854f0b" fontFamily="'Plus Jakarta Sans', sans-serif">33+ staff</text>
 
-              {/* Bottom: Teacher */}
-              <circle cx="170" cy="300" r="28" fill="#faeeda"/>
-              <text x="170" y="296" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#633806" fontFamily="'Plus Jakarta Sans', sans-serif">Teacher</text>
-              <text x="170" y="309" textAnchor="middle" fontSize="9"   fill="#854f0b" fontFamily="'Plus Jakarta Sans', sans-serif">33+ staff</text>
-
-              {/* Left: Student */}
-              <circle cx="40" cy="170" r="28" fill="#eeedfe"/>
-              <text x="40" y="166" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#3c3489" fontFamily="'Plus Jakarta Sans', sans-serif">Student</text>
-              <text x="40" y="179" textAnchor="middle" fontSize="9"   fill="#534ab7" fontFamily="'Plus Jakarta Sans', sans-serif">read-only</text>
+              {/* Bottom-right: Student */}
+              <circle cx="285" cy="303" r="28" fill="#eeedfe"/>
+              <text x="285" y="299" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#3c3489" fontFamily="'Plus Jakarta Sans', sans-serif">Student</text>
+              <text x="285" y="312" textAnchor="middle" fontSize="9"   fill="#534ab7" fontFamily="'Plus Jakarta Sans', sans-serif">read-only</text>
 
             </svg>
           </div>
