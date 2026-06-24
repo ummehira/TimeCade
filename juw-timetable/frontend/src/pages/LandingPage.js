@@ -212,7 +212,7 @@ export default function LandingPage() {
     },
     navLogo: { display: 'flex', alignItems: 'center', gap: '10px' },
     navLogoImg: { height: '34px', width: '34px', objectFit: 'contain', borderRadius: '8px' },
-    navLogoName: { fontSize: '17px', fontWeight: '800', color: '#1a2e3a', lineHeight: 1 },
+    navLogoName: { fontSize: '12px', fontWeight: '800', color: '#1a2e3a', lineHeight: 1.2 },
     navLogoSub: { fontSize: '10px', color: '#7a9aaa', fontWeight: '500' },
     navLinks: { display: 'flex', alignItems: 'center', gap: '34px' },
     navLink: { textDecoration: 'none', color: '#4a6070', fontSize: '14px', fontWeight: '500' },
@@ -263,7 +263,7 @@ export default function LandingPage() {
     footerGrid: { display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1.8fr 1fr 1fr 1fr', gap: isMobile ? '24px' : '36px', paddingBottom: '48px' },
     footerLogoRow: { display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '12px' },
     footerLogoImg: { width: '34px', height: '34px', borderRadius: '8px', objectFit: 'contain', background: 'rgba(255,255,255,0.1)', padding: '4px' },
-    footerBrand: { color: 'white', fontWeight: '800', fontSize: '16px' },
+    footerBrand: { color: 'white', fontWeight: '800', fontSize: '12px' },
     footerP: { fontSize: '12.5px', lineHeight: '1.65', color: '#7a9aaa', maxWidth: '220px' },
     footerSocials: { display: 'flex', gap: '8px', marginTop: '16px' },
     socialBtn: { width: '34px', height: '34px', border: '1px solid #2d4a5a', borderRadius: '7px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
@@ -286,9 +286,9 @@ export default function LandingPage() {
       {/* ── NAVBAR ── */}
       <nav style={S.nav}>
         <div style={S.navLogo}>
-          <img src="/logo.jpeg" alt="Timecade" style={{ width:'36px',height:'36px',borderRadius:'9px',objectFit:'cover',flexShrink:0 }}/>
+          <img src="/logo.jpeg" alt="Academic Scheduler Agent" style={{ width:'36px',height:'36px',borderRadius:'9px',objectFit:'cover',flexShrink:0 }}/>
           <div>
-            <div style={S.navLogoName}>Timecade</div>
+            <div style={S.navLogoName}>Academic Scheduler Agent</div>
             {!isMobile && <div style={S.navLogoSub}>Smart Timetable Management</div>}
           </div>
         </div>
@@ -434,7 +434,7 @@ export default function LandingPage() {
 
           {/* Left: copy */}
           <div style={{ flex: 1 }}>
-            <div style={S.aboutLabel}>About Timecade</div>
+            <div style={S.aboutLabel}>About Academic Scheduler Agent</div>
             <h2 style={S.aboutH2}>One platform,<br />three distinct roles</h2>
             <p style={S.aboutP}>
               Every user gets exactly the view they need. Admins control the full schedule, Teachers track their sessions, and Students stay updated in real time.
@@ -454,8 +454,9 @@ export default function LandingPage() {
 
               {/* Core */}
               <circle cx="170" cy="170" r="42" fill="#1a2e3a"/>
-              <text x="170" y="165" textAnchor="middle" fontSize="11" fontWeight="700" fill="#ffffff" fontFamily="'Plus Jakarta Sans', sans-serif">TIME</text>
-              <text x="170" y="180" textAnchor="middle" fontSize="11" fontWeight="700" fill="#7a9aaa" fontFamily="'Plus Jakarta Sans', sans-serif">CADE</text>
+              <text x="170" y="160" textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#ffffff" fontFamily="'Plus Jakarta Sans', sans-serif">ACADEMIC</text>
+              <text x="170" y="172" textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#ffffff" fontFamily="'Plus Jakarta Sans', sans-serif">SCHEDULER</text>
+              <text x="170" y="184" textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#7a9aaa" fontFamily="'Plus Jakarta Sans', sans-serif">AGENT</text>
 
               {/* Connector lines */}
               {/* Top: Admin */}
@@ -494,8 +495,8 @@ export default function LandingPage() {
             {/* Brand */}
             <div>
               <div style={S.footerLogoRow}>
-                <img src="/logo.jpeg" alt="Timecade" style={{ width:'34px',height:'34px',borderRadius:'8px',objectFit:'cover',flexShrink:0 }}/>
-                <span style={S.footerBrand}>Timecade</span>
+                <img src="/logo.jpeg" alt="Academic Scheduler Agent" style={{ width:'34px',height:'34px',borderRadius:'8px',objectFit:'cover',flexShrink:0 }}/>
+                <span style={S.footerBrand}>Academic Scheduler Agent</span>
               </div>
               <p style={S.footerP}>
                 Smart timetable management for CS &amp; SE departments. Manage schedules, resolve conflicts, and stay organised.
@@ -536,7 +537,7 @@ export default function LandingPage() {
               <div style={S.footerColHead}>Get in Touch</div>
               <div style={S.footerDivider} />
               {[
-                { label: 'Email',      val: 'timecade@gmail.com' },
+                { label: 'Email',      val: 'asa@gmail.com' },
                 { label: 'Instagram',  val: '@timecade' },
                 { label: 'Department', val: 'CS & SE Dept, Karachi' },
               ].map(c => (
@@ -557,7 +558,7 @@ export default function LandingPage() {
 
           {/* Bottom bar */}
           <div style={S.footerBottom}>
-            <span style={S.footerCopy}>2025 Timecade. All rights reserved. Built for CS &amp; SE Department.</span>
+            <span style={S.footerCopy}>2025 Academic Scheduler Agent. All rights reserved. Built for CS &amp; SE Department.</span>
             <div style={S.footerLinks}>
               {['Privacy Policy', 'Terms of Use', 'Support'].map(l => (
                 <a key={l} href="#" style={S.footerSmLink}>{l}</a>
