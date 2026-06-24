@@ -435,7 +435,7 @@ export default function LandingPage() {
           {/* Left: copy */}
           <div style={{ flex: 1 }}>
             <div style={S.aboutLabel}>About Timecade</div>
-            <h2 style={S.aboutH2}>One platform,<br />four distinct roles</h2>
+            <h2 style={S.aboutH2}>One platform,<br />three distinct roles</h2>
             <p style={S.aboutP}>
               Every user gets exactly the view they need. Admins control the full schedule, Teachers track their sessions, and Students stay updated in real time.
             </p>
