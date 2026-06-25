@@ -9,3 +9,5 @@ backend/uploads/*
 *.log
 .DS_Store
 Thumbs.db
+backend/config/seed.sql
+backend/config/schema.sql
