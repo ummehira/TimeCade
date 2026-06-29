@@ -53,7 +53,7 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
   const [formSemester,   setFormSemester]   = useState(semester||1);
   const [batchCourses,   setBatchCourses]   = useState([]);
   const [courseTeachers, setCourseTeachers] = useState([]);
-  const [form, setForm] = useState({ subject_id:'', teacher_id:'', room_id:'', day:'', time_slot:'', is_lab:false });
+  const [form, setForm] = useState({ subject_id:'', teacher_id:'', room_id:'', day:'', time_slot:'', is_lab:false, is_shared:false });
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
   const [batchDefaultRoom, setBatchDefaultRoom] = useState(null);
@@ -88,7 +88,7 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
                       (course?.name||'')+' '+(course?.code||'')+' '+(course?.short_name||'')
                     );
   const slotLabel = form.time_slot ? (form.is_lab ? LAB_SLOTS[form.time_slot] : SLOTS.find(s=>s.id===parseInt(form.time_slot))?.full) : null;
-  const roomReady = batchDefaultRoom || form.room_id;
+  const roomReady = form.room_id; // always use form.room_id — either auto-set from default or manually chosen
   const teacherReady = isFYP || form.teacher_id;
   const canAdd    = formBatch&&roomReady&&form.subject_id&&teacherReady&&form.day&&form.time_slot&&!loading;
 
@@ -141,19 +141,36 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
           </select>
         </div>
       </div>
-      {/* Room info — shown as read-only from batch default */}
-      {batchDefaultRoom ? (
-        <div style={{ background:'#f0fdf4',border:'1px solid #86efac',borderRadius:'7px',padding:'8px 14px',marginBottom:'10px',fontSize:'12px',color:'#166534',display:'flex',alignItems:'center',gap:'7px' }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          Room: <strong>{(rooms||[]).find(r=>String(r.id)===String(batchDefaultRoom))?.room_id || 'Default'}</strong>
-          <span style={{ color:'#4ade80',fontSize:'10px' }}>(batch default — change from edit popup)</span>
-        </div>
-      ) : formBatch ? (
-        <div style={{ background:'#fef3c7',border:'1px solid #fde68a',borderRadius:'7px',padding:'8px 14px',marginBottom:'10px',fontSize:'12px',color:'#92400e',display:'flex',alignItems:'center',gap:'7px' }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          No default room set for this batch — go to <strong style={{ marginLeft:'3px' }}>Batch Management → Edit</strong> to assign one.
-        </div>
-      ) : null}
+      {/* Room — pre-selects batch default but can be changed manually */}
+      <div style={{ marginBottom:'10px' }}>
+        <label style={fl}>
+          Room *
+          {batchDefaultRoom && (
+            <span style={{ fontWeight:'400',textTransform:'none',color:'#16a34a',marginLeft:'6px' }}>
+              (default: {(rooms||[]).find(r=>String(r.id)===String(batchDefaultRoom))?.room_id})
+            </span>
+          )}
+        </label>
+        <select
+          value={form.room_id||''}
+          onChange={e=>set('room_id', e.target.value)}
+          disabled={!formBatch}
+          style={{ ...fi, maxWidth:'320px', background:!formBatch?'#f8fafc':'white' }}
+        >
+          <option value="">-- Select Room --</option>
+          {(rooms||[]).map(r=>(
+            <option key={r.id} value={r.id}>
+              {r.room_id} — Cap: {r.capacity} · {r.room_type==='lab'?'Lab':'Classroom'}
+              {String(r.id)===String(batchDefaultRoom)?' (batch default)':''}
+            </option>
+          ))}
+        </select>
+        {formBatch && !batchDefaultRoom && (
+          <div style={{ fontSize:'10px',color:'#d97706',marginTop:'4px' }}>
+            No default room set for this batch — select manually or set a default in Batch Management.
+          </div>
+        )}
+      </div>
 
       {/* Day + Time + Lab + Submit */}
       <div style={{ display:'flex',gap:'10px',alignItems:'flex-end',flexWrap:'wrap' }}>
@@ -188,8 +205,16 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
             {course?.has_lab&&<span style={{ color:'#16a34a',fontSize:'10px' }}>✓</span>}
           </span>
         </label>
+        <label style={{ display:'flex',alignItems:'center',gap:'7px',padding:'8px 12px',background:'#fefce8',borderRadius:'7px',border:'1px solid #fde68a',cursor:'pointer',whiteSpace:'nowrap',height:'36px',boxSizing:'border-box' }}>
+          <input type="checkbox" checked={form.is_shared||false} onChange={e=>set('is_shared',e.target.checked)}
+            style={{ width:'14px',height:'14px',accentColor:'#d97706',cursor:'pointer' }}/>
+          <span style={{ fontSize:'12px',fontWeight:'600',color:'#92400e',display:'flex',alignItems:'center',gap:'5px' }}>
+            <span style={{ background:'#fef3c7',color:'#d97706',borderRadius:'4px',padding:'1px 6px',fontSize:'10px',fontWeight:'700' }}>SHARED</span>
+            Multi-batch
+          </span>
+        </label>
         {slotLabel&&<span style={{ fontSize:'11px',fontWeight:'600',color:form.is_lab?'#166534':'#2d4a5a',background:form.is_lab?'#dcfce7':'#e8f4fd',border:`1px solid ${form.is_lab?'#86efac':'#b8d9f5'}`,borderRadius:'5px',padding:'4px 10px',whiteSpace:'nowrap' }}>{slotLabel}</span>}
-        <button type="button" disabled={!canAdd} onClick={()=>onAdd({...form,batch_id:formBatch,semester:formSemester})}
+        <button type="button" disabled={!canAdd} onClick={()=>onAdd({...form,batch_id:formBatch,semester:formSemester,is_shared:form.is_shared||false})}
           style={{ background:CELL_NAVY,color:'white',border:'none',padding:'9px 20px',borderRadius:'7px',fontSize:'12px',fontWeight:'700',cursor:canAdd?'pointer':'not-allowed',fontFamily:'inherit',whiteSpace:'nowrap',opacity:canAdd?1:0.4 }}>
           {loading?'Adding...':'Add Class'}
         </button>
@@ -540,17 +565,19 @@ export default function TimetablePage({ canEdit=false }) {
   },[]);
 
   const loadEntries=useCallback(async()=>{
-    if(!selBatch) return;
     try{
-      // Load all entries for the selected batch — semester shown as info only, not a filter
-      const params = { batch_id: selBatch };
+      const params = {};
+      if(selBatch) params.batch_id = selBatch;
+      // If no batch selected but room filter is active, load all entries (filtered client-side)
+      if(!selBatch && !filterRoom) { setEntries([]); return; }
       if(selSemester) params.semester = selSemester;
+      setEntries([]); // clear stale entries immediately before fetching
       const r = await api.get('/timetable', { params });
       setEntries(r.data);
       setPendingMoves([]);
     }
     catch(e){ console.error(e); }
-  },[selBatch,selSemester]);
+  },[selBatch,selSemester,filterRoom]);
 
   useEffect(()=>{ loadEntries(); },[loadEntries]);
 
@@ -560,7 +587,7 @@ export default function TimetablePage({ canEdit=false }) {
     .map(e=>{ const p=pendingMoves.find(m=>m.entry.id===e.id); return p?{...e,day:p.newDay,time_slot:p.newSlot,_pending:true}:e; })
     .filter(e=>{
       if(filterTeacher&&e.teacher_id&&String(e.teacher_id)!==String(filterTeacher)) return false;
-      if(filterRoom&&String(e.room_id)!==String(filterRoom)) return false;
+      if(filterRoom&&(e.room_code||'').toLowerCase()!==(filterRoom||'').toLowerCase()) return false;
       if(searchQuery){
         const q=searchQuery.toLowerCase();
         const matchSubject = (e.subject_name||e.short_name||'').toLowerCase().includes(q);
@@ -583,8 +610,8 @@ export default function TimetablePage({ canEdit=false }) {
       const newSem   = parseInt(form.semester)||1;
       setSelBatch(newBatch);
       setSelSemester(newSem);
-      // Reload ALL entries for this batch — let grid show everything
-      const r = await api.get('/timetable', { params: { batch_id: newBatch } });
+      // Reload entries for this batch AND semester
+      const r = await api.get('/timetable', { params: { batch_id: newBatch, semester: newSem } });
       setEntries(r.data);
       setPendingMoves([]);
     }
@@ -597,7 +624,7 @@ export default function TimetablePage({ canEdit=false }) {
     setConflicts([]);
     showToast('Checking conflicts...','info');
     try{
-      const res=await api.post('/timetable/check-conflicts',{batch_id:entry.batch_id,teacher_id:entry.teacher_id,room_id:entry.room_id,day:newDay,time_slot:newSlot,exclude_id:entry.id});
+      const res=await api.post('/timetable/check-conflicts',{batch_id:entry.batch_id,subject_id:entry.subject_id,teacher_id:entry.teacher_id,room_id:entry.room_id,day:newDay,time_slot:newSlot,exclude_id:entry.id});
       if(res.data.hasConflict&&res.data.conflicts?.length){ setConflicts(res.data.conflicts); showToast(`Conflict — move blocked`,'error'); return; }
       setPendingMoves(prev=>[...prev.filter(p=>p.entry.id!==entry.id),{entry,newDay,newSlot}]);
       showToast(`${entry.short_name||entry.subject_name} → ${newDay} · Save to commit`,'info');
@@ -680,7 +707,7 @@ export default function TimetablePage({ canEdit=false }) {
                 <span style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px' }}>Batch</span>
                 <SearchableSelect label="Batch" placeholder="All Batches"
                   value={selBatch||''}
-                  onChange={v=>{ if(pendingMoves.length&&!window.confirm('Switch batch? Unsaved changes will be lost.')) return; setSelBatch(parseInt(v)||null); setSelSemester(1); setSearchQuery(''); }}
+                  onChange={v=>{ if(pendingMoves.length&&!window.confirm('Switch batch? Unsaved changes will be lost.')) return; setSelBatch(parseInt(v)||null); setSearchQuery(''); }}
                   options={batches.map(b=>({ value:b.id, label:b.batch_name }))}/>
               </div>
               <div style={{ display:'flex',flexDirection:'column',gap:'4px' }}>
@@ -702,7 +729,7 @@ export default function TimetablePage({ canEdit=false }) {
                 <SearchableSelect label="Room" placeholder="All Rooms"
                   value={filterRoom}
                   onChange={v=>setFilterRoom(v)}
-                  options={rooms.map(r=>({ value:r.id, label:`${r.room_id} (Cap: ${r.capacity})` }))}/>
+                  options={rooms.map(r=>({ value:r.room_id, label:`${r.room_id} (Cap: ${r.capacity})` }))}/>
               </div>
               {(filterTeacher||filterRoom||searchQuery)&&(
                 <div style={{ display:'flex',flexDirection:'column',gap:'4px' }}>
@@ -728,7 +755,7 @@ export default function TimetablePage({ canEdit=false }) {
               <div className="empty-state">
                 <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                 <h3>No classes scheduled</h3>
-                <p>{selBatch?'No classes for this batch and session yet':'Select a batch above to view its timetable'}</p>
+                <p>{selBatch?`No classes scheduled for this batch in Session ${selSemester||1} yet`:'Select a batch above to view its timetable'}</p>
               </div>
             ):(
               <TimetableGrid

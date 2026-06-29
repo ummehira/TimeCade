@@ -170,10 +170,18 @@ router.get('/subjects', authenticate, async (req, res) => {
     const params = [];
     if (major_code) {
       params.push(major_code);
-      where = `WHERE d.code = $1`;
+      where = `WHERE EXISTS (
+        SELECT 1 FROM subject_majors sm
+        WHERE sm.subject_id = s.id AND sm.major_code = $1
+      )`;
     }
     const r = await pool.query(
-      `SELECT s.*, d.name AS department_name, d.code AS major_code
+      `SELECT s.*,
+              d.name AS department_name, d.code AS major_code,
+              ARRAY(
+                SELECT sm.major_code FROM subject_majors sm
+                WHERE sm.subject_id = s.id ORDER BY sm.major_code
+              ) AS major_codes
        FROM subjects s
        LEFT JOIN departments d ON s.department_id = d.id
        ${where}
@@ -186,7 +194,7 @@ router.get('/subjects', authenticate, async (req, res) => {
 
 router.post('/subjects', authenticate, canEdit, async (req, res) => {
   try {
-    const { code, name, short_name, credit_hours, department_id, has_lab, credit_format } = req.body;
+    const { code, name, short_name, credit_hours, department_id, has_lab, credit_format, major_codes } = req.body;
     if (!name) return res.status(400).json({ message: 'name is required.' });
     if (code && !/^[A-Z]{3} \d{4}$/.test(code)) {
       return res.status(400).json({ message: 'Invalid course code format. Must be 3 uppercase letters, a space, then 4 digits (e.g. CFG 4123).' });
@@ -196,7 +204,16 @@ router.post('/subjects', authenticate, canEdit, async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
       [code || '', name, short_name || name.slice(0,8), credit_hours || 3, department_id || null, has_lab || false, credit_format || '3+0']
     );
-    res.status(201).json(r.rows[0]);
+    const subject = r.rows[0];
+    const majors = Array.isArray(major_codes) ? major_codes : (major_codes ? [major_codes] : []);
+    for (const mc of majors) {
+      await pool.query(
+        `INSERT INTO subject_majors (subject_id, major_code) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+        [subject.id, mc]
+      );
+    }
+    subject.major_codes = majors;
+    res.status(201).json(subject);
   } catch (err) {
     if (err.code === '23505') return res.status(400).json({ message: 'A course with this code already exists.' });
     res.status(500).json({ message: 'Server error.' });
@@ -205,7 +222,7 @@ router.post('/subjects', authenticate, canEdit, async (req, res) => {
 
 router.put('/subjects/:id', authenticate, canEdit, async (req, res) => {
   try {
-    const { code, name, short_name, credit_hours, department_id, has_lab, credit_format } = req.body;
+    const { code, name, short_name, credit_hours, department_id, has_lab, credit_format, major_codes } = req.body;
     if (!name) return res.status(400).json({ message: 'name is required.' });
     if (code) {
       const existing = await pool.query('SELECT code FROM subjects WHERE id=$1', [req.params.id]);
@@ -220,7 +237,19 @@ router.put('/subjects/:id', authenticate, canEdit, async (req, res) => {
       [code||name, name, short_name||name, parseInt(credit_hours)||3, department_id||null, has_lab||false, credit_format||'3+0', req.params.id]
     );
     if (!r.rows.length) return res.status(404).json({ message: 'Subject not found.' });
-    res.json(r.rows[0]);
+    const majors = Array.isArray(major_codes) ? major_codes : (major_codes ? [major_codes] : []);
+    if (majors.length > 0) {
+      await pool.query('DELETE FROM subject_majors WHERE subject_id=$1', [req.params.id]);
+      for (const mc of majors) {
+        await pool.query(
+          `INSERT INTO subject_majors (subject_id, major_code) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+          [req.params.id, mc]
+        );
+      }
+    }
+    const subject = r.rows[0];
+    subject.major_codes = majors;
+    res.json(subject);
   } catch (err) {
     console.error('PUT /subjects/:id error:', err.message);
     res.status(500).json({ message: 'Server error: ' + err.message });

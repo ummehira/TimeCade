@@ -65,7 +65,7 @@ function TeacherSidebar() {
         transition:'transform 0.28s cubic-bezier(0.4,0,0.2,1)' }}>
         <div style={{ padding:'16px 14px',borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',flexDirection:'column',alignItems:'center' }}>
           <div style={{ width:'44px',height:'44px',background:'rgba(255,255,255,0.15)',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',fontWeight:'800',color:'white',margin:'0 auto 8px' }}>T</div>
-          <div style={{ color:'white',fontSize:'9px',fontWeight:'700',textAlign:'center',lineHeight:1.2 }}>Academic Scheduler Agent</div>
+          <div style={{ color:'white',fontSize:'14px',fontWeight:'700',textAlign:'center',lineHeight:1 }}>Timecade</div>
           <div style={{ color:'rgba(255,255,255,0.45)',fontSize:'10px',marginTop:'3px',textAlign:'center' }}>CS & SE Department</div>
         </div>
         <nav style={{ flex:1,padding:'10px 8px',overflowY:'auto' }}>

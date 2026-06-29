@@ -53,6 +53,18 @@ CREATE TABLE IF NOT EXISTS subjects (
   created_at    TIMESTAMP DEFAULT NOW()
 );
 
+-- ── Subject-Majors Junction ──────────────────
+-- Allows a course to belong to multiple majors (CS, SE, DS)
+-- e.g. Islamic Studies → CS, SE, DS all at once
+CREATE TABLE IF NOT EXISTS subject_majors (
+  id         SERIAL PRIMARY KEY,
+  subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  major_code VARCHAR(20) NOT NULL,
+  UNIQUE(subject_id, major_code)
+);
+CREATE INDEX IF NOT EXISTS idx_subject_majors_subject ON subject_majors(subject_id);
+CREATE INDEX IF NOT EXISTS idx_subject_majors_major   ON subject_majors(major_code);
+
 -- ── Rooms ───────────────────────────────────
 CREATE TABLE IF NOT EXISTS rooms (
   id           SERIAL PRIMARY KEY,

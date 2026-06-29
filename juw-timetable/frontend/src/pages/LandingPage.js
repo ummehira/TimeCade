@@ -212,7 +212,7 @@ export default function LandingPage() {
     },
     navLogo: { display: 'flex', alignItems: 'center', gap: '10px' },
     navLogoImg: { height: '34px', width: '34px', objectFit: 'contain', borderRadius: '8px' },
-    navLogoName: { fontSize: '12px', fontWeight: '800', color: '#1a2e3a', lineHeight: 1.2 },
+    navLogoName: { fontSize: '17px', fontWeight: '800', color: '#1a2e3a', lineHeight: 1 },
     navLogoSub: { fontSize: '10px', color: '#7a9aaa', fontWeight: '500' },
     navLinks: { display: 'flex', alignItems: 'center', gap: '34px' },
     navLink: { textDecoration: 'none', color: '#4a6070', fontSize: '14px', fontWeight: '500' },
@@ -263,7 +263,7 @@ export default function LandingPage() {
     footerGrid: { display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1.8fr 1fr 1fr 1fr', gap: isMobile ? '24px' : '36px', paddingBottom: '48px' },
     footerLogoRow: { display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '12px' },
     footerLogoImg: { width: '34px', height: '34px', borderRadius: '8px', objectFit: 'contain', background: 'rgba(255,255,255,0.1)', padding: '4px' },
-    footerBrand: { color: 'white', fontWeight: '800', fontSize: '12px' },
+    footerBrand: { color: 'white', fontWeight: '800', fontSize: '16px' },
     footerP: { fontSize: '12.5px', lineHeight: '1.65', color: '#7a9aaa', maxWidth: '220px' },
     footerSocials: { display: 'flex', gap: '8px', marginTop: '16px' },
     socialBtn: { width: '34px', height: '34px', border: '1px solid #2d4a5a', borderRadius: '7px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
@@ -286,9 +286,9 @@ export default function LandingPage() {
       {/* ── NAVBAR ── */}
       <nav style={S.nav}>
         <div style={S.navLogo}>
-          <img src="/logo.jpeg" alt="Academic Scheduler Agent" style={{ width:'36px',height:'36px',borderRadius:'9px',objectFit:'cover',flexShrink:0 }}/>
+          <img src="/logo.jpeg" alt="Timecade" style={{ width:'36px',height:'36px',borderRadius:'9px',objectFit:'cover',flexShrink:0 }}/>
           <div>
-            <div style={S.navLogoName}>Academic Scheduler Agent</div>
+            <div style={S.navLogoName}>Timecade</div>
             {!isMobile && <div style={S.navLogoSub}>Smart Timetable Management</div>}
           </div>
         </div>
@@ -434,10 +434,10 @@ export default function LandingPage() {
 
           {/* Left: copy */}
           <div style={{ flex: 1 }}>
-            <div style={S.aboutLabel}>About Academic Scheduler Agent</div>
-            <h2 style={S.aboutH2}>One platform,<br />three distinct roles</h2>
+            <div style={S.aboutLabel}>About Timecade</div>
+            <h2 style={S.aboutH2}>One platform,<br />four distinct roles</h2>
             <p style={S.aboutP}>
-              Every user gets exactly the view they need. Admins control the full schedule, Teachers track their sessions, and Students stay updated in real time.
+              Every user gets exactly the view they need. Office Assistants control the schedule, Admins propose changes, Teachers track their sessions, and Students stay updated in real time.
             </p>
             <Link to="/login" style={{ textDecoration: 'none' }}>
               <button style={S.aboutBtn}>Access Dashboard</button>
@@ -454,32 +454,34 @@ export default function LandingPage() {
 
               {/* Core */}
               <circle cx="170" cy="170" r="42" fill="#1a2e3a"/>
-              <text x="170" y="160" textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#ffffff" fontFamily="'Plus Jakarta Sans', sans-serif">ACADEMIC</text>
-              <text x="170" y="172" textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#ffffff" fontFamily="'Plus Jakarta Sans', sans-serif">SCHEDULER</text>
-              <text x="170" y="184" textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#7a9aaa" fontFamily="'Plus Jakarta Sans', sans-serif">AGENT</text>
+              <text x="170" y="165" textAnchor="middle" fontSize="11" fontWeight="700" fill="#ffffff" fontFamily="'Plus Jakarta Sans', sans-serif">TIME</text>
+              <text x="170" y="180" textAnchor="middle" fontSize="11" fontWeight="700" fill="#7a9aaa" fontFamily="'Plus Jakarta Sans', sans-serif">CADE</text>
 
               {/* Connector lines */}
-              {/* Top: Admin */}
               <line x1="170" y1="68"  x2="170" y2="128" stroke="#d0dde4" strokeWidth="0.8"/>
-              {/* Bottom-left: Teacher */}
-              <line x1="170" y1="212" x2="55"  y2="275" stroke="#d0dde4" strokeWidth="0.8"/>
-              {/* Bottom-right: Student */}
-              <line x1="170" y1="212" x2="285" y2="275" stroke="#d0dde4" strokeWidth="0.8"/>
+              <line x1="302" y1="170" x2="248" y2="170" stroke="#d0dde4" strokeWidth="0.8"/>
+              <line x1="170" y1="272" x2="170" y2="212" stroke="#d0dde4" strokeWidth="0.8"/>
+              <line x1="38"  y1="170" x2="92"  y2="170" stroke="#d0dde4" strokeWidth="0.8"/>
 
-              {/* Top: Admin */}
-              <circle cx="170" cy="40" r="28" fill="#e6f1fb"/>
-              <text x="170" y="36" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#0c447c" fontFamily="'Plus Jakarta Sans', sans-serif">Dept</text>
-              <text x="170" y="49" textAnchor="middle" fontSize="9"   fill="#185fa5" fontFamily="'Plus Jakarta Sans', sans-serif">Admin</text>
+              {/* Top: Office Assistant */}
+              <circle cx="170" cy="40" r="28" fill="#e1f5ee"/>
+              <text x="170" y="36" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#085041" fontFamily="'Plus Jakarta Sans', sans-serif">Office</text>
+              <text x="170" y="49" textAnchor="middle" fontSize="9"   fill="#0f6e56" fontFamily="'Plus Jakarta Sans', sans-serif">Assistant</text>
 
-              {/* Bottom-left: Teacher */}
-              <circle cx="55" cy="303" r="28" fill="#faeeda"/>
-              <text x="55" y="299" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#633806" fontFamily="'Plus Jakarta Sans', sans-serif">Teacher</text>
-              <text x="55" y="312" textAnchor="middle" fontSize="9"   fill="#854f0b" fontFamily="'Plus Jakarta Sans', sans-serif">33+ staff</text>
+              {/* Right: Admin */}
+              <circle cx="300" cy="170" r="28" fill="#e6f1fb"/>
+              <text x="300" y="166" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#0c447c" fontFamily="'Plus Jakarta Sans', sans-serif">Dept</text>
+              <text x="300" y="179" textAnchor="middle" fontSize="9"   fill="#185fa5" fontFamily="'Plus Jakarta Sans', sans-serif">Admin</text>
 
-              {/* Bottom-right: Student */}
-              <circle cx="285" cy="303" r="28" fill="#eeedfe"/>
-              <text x="285" y="299" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#3c3489" fontFamily="'Plus Jakarta Sans', sans-serif">Student</text>
-              <text x="285" y="312" textAnchor="middle" fontSize="9"   fill="#534ab7" fontFamily="'Plus Jakarta Sans', sans-serif">read-only</text>
+              {/* Bottom: Teacher */}
+              <circle cx="170" cy="300" r="28" fill="#faeeda"/>
+              <text x="170" y="296" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#633806" fontFamily="'Plus Jakarta Sans', sans-serif">Teacher</text>
+              <text x="170" y="309" textAnchor="middle" fontSize="9"   fill="#854f0b" fontFamily="'Plus Jakarta Sans', sans-serif">33+ staff</text>
+
+              {/* Left: Student */}
+              <circle cx="40" cy="170" r="28" fill="#eeedfe"/>
+              <text x="40" y="166" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#3c3489" fontFamily="'Plus Jakarta Sans', sans-serif">Student</text>
+              <text x="40" y="179" textAnchor="middle" fontSize="9"   fill="#534ab7" fontFamily="'Plus Jakarta Sans', sans-serif">read-only</text>
 
             </svg>
           </div>
@@ -495,8 +497,8 @@ export default function LandingPage() {
             {/* Brand */}
             <div>
               <div style={S.footerLogoRow}>
-                <img src="/logo.jpeg" alt="Academic Scheduler Agent" style={{ width:'34px',height:'34px',borderRadius:'8px',objectFit:'cover',flexShrink:0 }}/>
-                <span style={S.footerBrand}>Academic Scheduler Agent</span>
+                <img src="/logo.jpeg" alt="Timecade" style={{ width:'34px',height:'34px',borderRadius:'8px',objectFit:'cover',flexShrink:0 }}/>
+                <span style={S.footerBrand}>Timecade</span>
               </div>
               <p style={S.footerP}>
                 Smart timetable management for CS &amp; SE departments. Manage schedules, resolve conflicts, and stay organised.
@@ -537,7 +539,7 @@ export default function LandingPage() {
               <div style={S.footerColHead}>Get in Touch</div>
               <div style={S.footerDivider} />
               {[
-                { label: 'Email',      val: 'asa@gmail.com' },
+                { label: 'Email',      val: 'timecade@gmail.com' },
                 { label: 'Instagram',  val: '@timecade' },
                 { label: 'Department', val: 'CS & SE Dept, Karachi' },
               ].map(c => (
@@ -558,7 +560,7 @@ export default function LandingPage() {
 
           {/* Bottom bar */}
           <div style={S.footerBottom}>
-            <span style={S.footerCopy}>2025 Academic Scheduler Agent. All rights reserved. Built for CS &amp; SE Department.</span>
+            <span style={S.footerCopy}>2025 Timecade. All rights reserved. Built for CS &amp; SE Department.</span>
             <div style={S.footerLinks}>
               {['Privacy Policy', 'Terms of Use', 'Support'].map(l => (
                 <a key={l} href="#" style={S.footerSmLink}>{l}</a>

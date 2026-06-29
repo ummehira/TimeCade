@@ -1,4 +1,4 @@
-  // frontend/src/pages/assistant/OfficeMgmtPage.js
+// frontend/src/pages/assistant/OfficeMgmtPage.js
   import React, { useState, useEffect } from 'react';
   import { GraduationCap, Users, BookOpen, Building2, Clock, Plus, Pencil, Check, X, Trash2, Search } from 'lucide-react';
   import api from '../../utils/api';
@@ -11,13 +11,20 @@
   const msg  = ok => ({ padding:'9px 14px',borderRadius:'7px',fontSize:'12px',fontWeight:'600',marginBottom:'14px',background:ok?'#dcfce7':'#fef2f2',color:ok?'#16a34a':'#dc2626',border:`1px solid ${ok?'#86efac':'#fecaca'}`,display:'flex',alignItems:'center',gap:'7px' });
 
   // ── Shared: Bulk-delete toolbar ───────────────────────────────────────────
-  function BulkBar({ count, onDelete, onClear }) {
+  function BulkBar({ count, onDelete, onEdit, onClear }) {
     if (count === 0) return null;
     return (
-      <div style={{ display:'flex',alignItems:'center',gap:'10px',padding:'9px 14px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:'8px',marginBottom:'12px' }}>
-        <span style={{ fontSize:'12px',fontWeight:'700',color:'#dc2626' }}>{count} selected</span>
-        <button onClick={onDelete} style={{ ...btn,background:'#dc2626',padding:'6px 14px',fontSize:'11px' }}><Trash2 size={12}/> Delete Selected</button>
-        <button onClick={onClear} style={{ background:'white',border:'1px solid #dde3e8',color:'#5a7080',padding:'6px 12px',borderRadius:'7px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit' }}>Clear</button>
+      <div style={{ display:'flex',alignItems:'center',gap:'10px',padding:'9px 14px',background:'#1a2e3a',border:'1px solid #2d4a5a',borderRadius:'8px',marginBottom:'12px',flexWrap:'wrap' }}>
+        <span style={{ fontSize:'12px',fontWeight:'700',color:'white',flex:1 }}>{count} selected</span>
+        {count===1 && onEdit && (
+          <button onClick={onEdit} style={{ ...btn,background:'#2d6a9f',padding:'6px 14px',fontSize:'11px',display:'flex',alignItems:'center',gap:'5px' }}>
+            <Pencil size={12}/> Edit
+          </button>
+        )}
+        <button onClick={onDelete} style={{ ...btn,background:'#dc2626',padding:'6px 14px',fontSize:'11px',display:'flex',alignItems:'center',gap:'5px' }}>
+          <Trash2 size={12}/> Delete{count>1?` (${count})`:''}
+        </button>
+        <button onClick={onClear} style={{ background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'white',padding:'6px 12px',borderRadius:'7px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'4px' }}><X size={12}/> Clear</button>
       </div>
     );
   }
@@ -92,6 +99,25 @@
       </div>
     );
   }
+  // ── Shared: Undo Toast ────────────────────────────────────────────────────
+  function UndoToast({ message, onUndo, onDismiss }) {
+    return (
+      <div style={{ position:'fixed',bottom:'24px',left:'50%',transform:'translateX(-50%)',zIndex:9999,
+        background:'#1a2e3a',color:'white',padding:'12px 18px',borderRadius:'10px',
+        boxShadow:'0 6px 24px rgba(0,0,0,0.25)',display:'flex',alignItems:'center',gap:'14px',
+        fontSize:'13px',fontWeight:'600',minWidth:'280px',maxWidth:'90vw',
+        animation:'slideUp 0.2s ease' }}>
+        <span style={{ flex:1 }}>{message}</span>
+        <button onClick={onUndo} style={{ background:'#f59e0b',color:'white',border:'none',
+          padding:'5px 14px',borderRadius:'6px',fontSize:'12px',fontWeight:'700',cursor:'pointer',
+          fontFamily:'inherit',whiteSpace:'nowrap' }}>Undo</button>
+        <button onClick={onDismiss} style={{ background:'rgba(255,255,255,0.1)',border:'none',
+          color:'white',padding:'5px 10px',borderRadius:'6px',fontSize:'12px',cursor:'pointer',
+          fontFamily:'inherit' }}>×</button>
+      </div>
+    );
+  }
+
   function SectionLabel({ children, count }) {
     return (
       <div style={{ display:'flex',alignItems:'center',gap:'8px',marginBottom:'10px' }}>
@@ -158,7 +184,7 @@
     const [selCourses, setSelCourses] = useState([]);
     const [rooms,      setRooms]      = useState([]);
     const [selRoom,    setSelRoom]    = useState('');
-    const [form, setForm] = useState({ major:'',major_code:'',year:new Date().getFullYear(),student_count:45,department_id:'' });
+    const [form, setForm] = useState({ major:'',major_code:'',year:new Date().getFullYear(),student_count:45,department_id:'',section:'' });
     const [m, setM] = useState(null);
     const [search, setSearch] = useState('');
     const [editBatch,   setEditBatch]   = useState(null);
@@ -168,9 +194,14 @@
     const [batchCourses,setBatchCourses]= useState({});
     const [viewBatch,   setViewBatch]   = useState(null);
     const [selIds,      setSelIds]      = useState([]);
+    const [undoToast,   setUndoToast]   = useState(null); // { message, onUndo }
+    const undoTimerRef = React.useRef(null);
 
     const MAJORS=[{l:'Computer Science',c:'CS'},{l:'Software Engineering',c:'SE'},{l:'Data Science',c:'DS'}];
-    const derivedName = (major_code, year) => major_code && year ? `BS${major_code}-${year}` : '';
+    const derivedName = (major_code, year, section) => {
+      if (!major_code || !year) return '';
+      return section ? `BS${major_code}-${section.toUpperCase()}-${year}` : `BS${major_code}-${year}`;
+    };
 
     const loadData = () => {
       api.get('/office/batches').then(r=>{
@@ -204,7 +235,7 @@
     const handleSubmit = async e => {
       e.preventDefault();
       if(!form.major_code){ setM({ok:false,text:'Please select a major.'}); return; }
-      const batchName = derivedName(form.major_code, form.year);
+      const batchName = derivedName(form.major_code, form.year, form.section);
       const duplicate = batches.find(b=>b.batch_name.trim().toLowerCase()===batchName.trim().toLowerCase());
       if(duplicate){ setM({ok:false,text:`A batch named "${batchName}" already exists.`}); setTimeout(()=>setM(null),4000); return; }
       try{
@@ -214,7 +245,7 @@
         }
         loadData();
         setM({ok:true,text:selCourses.length>0?`Batch "${batchName}" added with ${selCourses.length} course(s).`:`Batch "${batchName}" added.`});
-        setForm(f=>({...f,major:'',major_code:'',year:new Date().getFullYear(),student_count:45,department_id:''}));
+        setForm(f=>({...f,major:'',major_code:'',year:new Date().getFullYear(),student_count:45,department_id:'',section:''}));
         setSelCourses([]); setSelRoom('');
       }catch(err){
         const errMsg = err.response?.data?.message||'';
@@ -235,6 +266,16 @@
         const r=await api.get('/assignments/batch-subjects',{params:{batch_id:b.id}});
         setEditCourses(r.data);
         setEditSel(r.data.map(x=>x.subject_id));
+        // Load major filtered subjects
+        const majorRes = b.major_code
+          ? await api.get('/office/subjects',{params:{major_code:b.major_code}})
+          : await api.get('/office/subjects');
+        const majorSubjects = majorRes.data || [];
+        // Merge assigned courses not in major list (old courses without major)
+        const extraAssigned = r.data
+          .filter(c=>!majorSubjects.find(s=>s.id===c.subject_id))
+          .map(c=>({ id:c.subject_id, name:c.subject_name||c.name, short_name:c.short_name||'', major_codes:[] }));
+        setSubjects([...majorSubjects, ...extraAssigned]);
       }catch(_){ setEditCourses([]); setEditSel([]); }
     };
 
@@ -260,29 +301,55 @@
       setTimeout(()=>setM(null),3500);
     };
 
+    const showUndo = (message, undoFn) => {
+      if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setUndoToast({ message, onUndo: undoFn });
+      undoTimerRef.current = setTimeout(() => setUndoToast(null), 5000);
+    };
+
     const handleDelete = async (b) => {
-      if(!window.confirm(`Delete batch "${b.batch_name}"? This cannot be undone.`)) return;
-      try{
-        await api.delete(`/office/batches/${b.id}`);
-        setViewBatch(null); setEditBatch(null);
-        setSelIds(p=>p.filter(x=>x!==b.id));
-        loadData();
-        setM({ok:true,text:`Batch "${b.batch_name}" deleted.`});
-      }catch(err){ setM({ok:false,text:err.response?.data?.message||'Error deleting batch.'}); }
-      setTimeout(()=>setM(null),3500);
+      if(!window.confirm(`Delete batch "${b.batch_name}"? You'll have 5 seconds to undo.`)) return;
+      setViewBatch(null); setEditBatch(null);
+      setSelIds(p=>p.filter(x=>x!==b.id));
+      // Optimistically remove from UI
+      setBatches(prev => prev.filter(x=>x.id!==b.id));
+      let undone = false;
+      showUndo(`Batch "${b.batch_name}" deleted.`, () => {
+        undone = true;
+        setUndoToast(null);
+        loadData(); // restore
+        setM({ok:true,text:`Undo successful — batch "${b.batch_name}" restored.`});
+        setTimeout(()=>setM(null),3000);
+      });
+      setTimeout(async () => {
+        if(undone) return;
+        try{ await api.delete(`/office/batches/${b.id}`); loadData(); }
+        catch(err){ setM({ok:false,text:err.response?.data?.message||'Error deleting batch.'}); loadData(); setTimeout(()=>setM(null),3500); }
+      }, 5000);
     };
 
     const handleBulkDelete = async () => {
-      const names = batches.filter(b=>selIds.includes(b.id)).map(b=>b.batch_name).join(', ');
-      if(!window.confirm(`Delete ${selIds.length} batch(es):\n${names}\n\nThis cannot be undone.`)) return;
-      let ok=0, fail=0;
-      for(const id of selIds){
-        try{ await api.delete(`/office/batches/${id}`); ok++; }catch(_){ fail++; }
-      }
+      const targets = batches.filter(b=>selIds.includes(b.id));
+      const names = targets.map(b=>b.batch_name).join(', ');
+      if(!window.confirm(`Delete ${selIds.length} batch(es):\n${names}\n\nYou'll have 5 seconds to undo.`)) return;
+      const savedIds = [...selIds];
       setSelIds([]); setViewBatch(null); setEditBatch(null);
-      loadData();
-      setM({ok:fail===0,text:`Deleted ${ok} batch(es)${fail>0?`, ${fail} failed`:''}.`});
-      setTimeout(()=>setM(null),4000);
+      setBatches(prev => prev.filter(b=>!savedIds.includes(b.id)));
+      let undone = false;
+      showUndo(`Deleted ${savedIds.length} batch(es).`, () => {
+        undone = true;
+        setUndoToast(null);
+        loadData();
+        setM({ok:true,text:'Undo successful — batches restored.'});
+        setTimeout(()=>setM(null),3000);
+      });
+      setTimeout(async () => {
+        if(undone) return;
+        let ok=0, fail=0;
+        for(const id of savedIds){ try{ await api.delete(`/office/batches/${id}`); ok++; }catch(_){ fail++; } }
+        loadData();
+        if(fail>0){ setM({ok:false,text:`Deleted ${ok}, ${fail} failed.`}); setTimeout(()=>setM(null),4000); }
+      }, 5000);
     };
 
     const filtered = batches.filter(b=>
@@ -297,6 +364,7 @@
 
     return (
       <div>
+        {undoToast && <UndoToast message={undoToast.message} onUndo={undoToast.onUndo} onDismiss={()=>{ setUndoToast(null); if(undoTimerRef.current) clearTimeout(undoTimerRef.current); }}/>}
         {m&&<div style={msg(m.ok)}>{m.ok?<Check size={13}/>:<X size={13}/>} {m.text}</div>}
 
         {editBatch&&(
@@ -332,7 +400,36 @@
             </div>
             <div style={{ border:'2px solid #dde3e8',borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
               <SectionLabel count={editSel.length}>Assigned Courses</SectionLabel>
-              <Checklist items={subjects} selected={editSel} onToggle={id=>setEditSel(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])} labelKey="name" emptyText="No courses available" maxHeight={200}/>
+              {editCourses.length > 0 ? (
+                <div style={{ marginBottom:'12px' }}>
+                  <div style={{ fontSize:'10px',color:'#7a9aaa',fontWeight:'600',textTransform:'uppercase',letterSpacing:'0.4px',marginBottom:'8px' }}>Currently Assigned ({editCourses.length})</div>
+                  <div style={{ display:'flex',flexDirection:'column',gap:'5px' }}>
+                    {editCourses.map(c=>{
+                      const removing = !editSel.includes(c.subject_id);
+                      return (
+                        <div key={c.subject_id} style={{ display:'flex',alignItems:'center',justifyContent:'space-between',padding:'7px 10px',background:removing?'#fef2f2':'#f0fdf4',border:`1px solid ${removing?'#fca5a5':'#86efac'}`,borderRadius:'6px' }}>
+                          <span style={{ fontSize:'12px',fontWeight:'600',color:removing?'#dc2626':'#166534',textDecoration:removing?'line-through':'none' }}>{c.subject_name||c.name}</span>
+                          {removing
+                            ? <button onClick={()=>setEditSel(p=>[...p,c.subject_id])} style={{ background:'#f0fdf4',border:'1px solid #86efac',color:'#166534',borderRadius:'5px',padding:'3px 8px',fontSize:'10px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit' }}>Undo</button>
+                            : <button onClick={()=>setEditSel(p=>p.filter(x=>x!==c.subject_id))} style={{ background:'#fef2f2',border:'1px solid #fca5a5',color:'#dc2626',borderRadius:'5px',padding:'3px 8px',fontSize:'10px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'3px' }}><X size={10}/> Remove</button>
+                          }
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {editCourses.filter(c=>!editSel.includes(c.subject_id)).length>0&&(
+                    <div style={{ marginTop:'8px',padding:'6px 10px',background:'#fef2f2',border:'1px solid #fca5a5',borderRadius:'6px',fontSize:'11px',color:'#dc2626' }}>
+                      ⚠ {editCourses.filter(c=>!editSel.includes(c.subject_id)).length} course(s) will be removed on Save
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ padding:'10px',textAlign:'center',color:'#aabbc8',fontSize:'12px',marginBottom:'8px' }}>No courses assigned yet</div>
+              )}
+              <div style={{ borderTop:'1px dashed #dde3e8',paddingTop:'12px' }}>
+                <div style={{ fontSize:'10px',color:'#7a9aaa',fontWeight:'600',textTransform:'uppercase',letterSpacing:'0.4px',marginBottom:'8px' }}>Add More Courses</div>
+                <Checklist items={subjects.filter(s=>!editCourses.find(c=>c.subject_id===s.id))} selected={editSel} onToggle={id=>setEditSel(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])} labelKey="name" emptyText="No more courses available" maxHeight={160}/>
+              </div>
             </div>
             <div style={{ display:'flex',gap:'10px' }}>
               <button onClick={handleEditSave} style={{ ...btn,background:'#16a34a' }}><Check size={13}/> Save Changes</button>
@@ -344,7 +441,7 @@
 
         {!editBatch&&(
           <div style={card}>
-            <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Batch</div>
+            <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px' }}>Add New Batch</div>
             <form onSubmit={handleSubmit}>
               <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr 1fr',gap:'12px',marginBottom:'12px' }}>
                 <div>
@@ -358,9 +455,18 @@
                   <input style={fi} type="number" min="2022" max="2030" value={form.year} onChange={e=>setForm(f=>({...f,year:parseInt(e.target.value)}))} required/>
                 </div>
                 <div>
+                  <label style={fl}>Section</label>
+                  <select style={fi} value={form.section} onChange={e=>setForm(f=>({...f,section:e.target.value}))}>
+                    <option value="">None (no section)</option>
+                    <option value="A">Section A</option>
+                    <option value="B">Section B</option>
+                    <option value="C">Section C</option>
+                  </select>
+                </div>
+                <div>
                   <label style={fl}>Batch Name (auto-generated)</label>
                   <div style={{ ...fi,background:'#f0f4f7',color:form.major_code?'#1a2e3a':'#aabbc8',fontWeight:'700',cursor:'default',userSelect:'none',lineHeight:'1.4' }}>
-                    {derivedName(form.major_code,form.year)||'Select major + year'}
+                    {derivedName(form.major_code,form.year,form.section)||'Select major + year'}
                   </div>
                 </div>
                 <div>
@@ -462,7 +568,7 @@
           </div>
         </div>
         <SearchBar value={search} onChange={setSearch} placeholder="Search by batch name, major or year..."/>
-        <BulkBar count={selIds.length} onDelete={handleBulkDelete} onClear={()=>setSelIds([])}/>
+              <BulkBar count={selIds.length} onEdit={selIds.length===1?()=>openEdit(batches.find(b=>b.id===selIds[0])):null} onDelete={handleBulkDelete} onClear={()=>setSelIds([])}/>
         <div style={{ borderRadius:'10px',overflow:'hidden',border:'1px solid #e0e8ed' }}>
           <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
             <thead><tr style={{ background:'#2d4a5a',color:'white' }}>
@@ -490,12 +596,7 @@
                   <td style={{ padding:'10px 14px',color:'#5a7080' }}>{b.student_count}</td>
                   <td style={{ padding:'10px 14px' }} onClick={e=>e.stopPropagation()}>
                     <div style={{ display:'flex',gap:'6px' }}>
-                      <button onClick={()=>openEdit(b)} style={{ background:editBatch?.id===b.id?'#2d4a5a':'transparent',color:editBatch?.id===b.id?'white':'#2d4a5a',border:'1px solid #2d4a5a',padding:'5px 12px',borderRadius:'6px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'4px' }}>
-                        <Pencil size={11}/> {editBatch?.id===b.id?'Editing':'Edit'}
-                      </button>
-                      <button onClick={()=>handleDelete(b)} style={{ background:'transparent',color:'#dc2626',border:'1px solid #fca5a5',padding:'5px 10px',borderRadius:'6px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'4px' }}>
-                        <Trash2 size={11}/>
-                      </button>
+                      <span style={{ fontSize:'10px',color:'#aabbc8',fontStyle:'italic' }}>Click row to select</span>
                     </div>
                   </td>
                 </tr>
@@ -523,11 +624,13 @@
     const [editCourses, setEditCourses]= useState([]);
     const [editSel,     setEditSel]    = useState([]);
     const [selIds,      setSelIds]     = useState([]);
+    const [undoToast,   setUndoToast]  = useState(null);
+    const undoTimerRef = React.useRef(null);
 
     const loadData = () => {
       api.get('/office/teachers').then(r=>setTeachers(r.data));
       api.get('/office/departments').then(r=>setDepts(r.data));
-      api.get('/office/subjects').then(r=>setSubjects(r.data));
+      // subjects loaded on major selection only — keeps list filtered by major
     };
     useEffect(()=>{ loadData(); },[]);
 
@@ -559,6 +662,9 @@
         const r = await api.get('/assignments/teacher-subjects',{params:{teacher_id:t.id}});
         setEditCourses(r.data);
         setEditSel(r.data.map(x=>x.subject_id));
+        // Load all subjects so edit popup checklist is populated
+        const sr = await api.get('/office/subjects');
+        setSubjects(sr.data);
       }catch(_){ setEditCourses([]); setEditSel([]); }
     };
 
@@ -577,27 +683,50 @@
       setTimeout(()=>setM(null),3500);
     };
 
+    const showUndo = (message, undoFn) => {
+      if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setUndoToast({ message, onUndo: undoFn });
+      undoTimerRef.current = setTimeout(() => setUndoToast(null), 5000);
+    };
+
     const handleDelete = async t => {
-      if(!window.confirm(`Delete teacher "${t.full_name}"? This cannot be undone.`)) return;
-      try{
-        await api.delete(`/office/teachers/${t.id}`);
-        setSelIds(p=>p.filter(x=>x!==t.id));
-        setEditTeacher(null); loadData();
-        setM({ok:true,text:`Teacher "${t.full_name}" deleted.`});
-      }catch(err){ setM({ok:false,text:err.response?.data?.message||'Error deleting.'}); }
-      setTimeout(()=>setM(null),3500);
+      if(!window.confirm(`Delete teacher "${t.full_name}"? You'll have 5 seconds to undo.`)) return;
+      setEditTeacher(null);
+      setSelIds(p=>p.filter(x=>x!==t.id));
+      setTeachers(prev=>prev.filter(x=>x.id!==t.id));
+      let undone = false;
+      showUndo(`Teacher "${t.full_name}" deleted.`, () => {
+        undone = true; setUndoToast(null); loadData();
+        setM({ok:true,text:`Undo successful — "${t.full_name}" restored.`});
+        setTimeout(()=>setM(null),3000);
+      });
+      setTimeout(async () => {
+        if(undone) return;
+        try{ await api.delete(`/office/teachers/${t.id}`); loadData(); }
+        catch(err){ setM({ok:false,text:err.response?.data?.message||'Error deleting.'}); loadData(); setTimeout(()=>setM(null),3500); }
+      }, 5000);
     };
 
     const handleBulkDelete = async () => {
-      const names = teachers.filter(t=>selIds.includes(t.id)).map(t=>t.full_name).join(', ');
-      if(!window.confirm(`Delete ${selIds.length} teacher(s):\n${names}\n\nThis cannot be undone.`)) return;
-      let ok=0, fail=0;
-      for(const id of selIds){
-        try{ await api.delete(`/office/teachers/${id}`); ok++; }catch(_){ fail++; }
-      }
-      setSelIds([]); setEditTeacher(null); loadData();
-      setM({ok:fail===0,text:`Deleted ${ok} teacher(s)${fail>0?`, ${fail} failed`:''}.`});
-      setTimeout(()=>setM(null),4000);
+      const targets = teachers.filter(t=>selIds.includes(t.id));
+      const names = targets.map(t=>t.full_name).join(', ');
+      if(!window.confirm(`Delete ${selIds.length} teacher(s):\n${names}\n\nYou'll have 5 seconds to undo.`)) return;
+      const savedIds = [...selIds];
+      setSelIds([]); setEditTeacher(null);
+      setTeachers(prev=>prev.filter(t=>!savedIds.includes(t.id)));
+      let undone = false;
+      showUndo(`Deleted ${savedIds.length} teacher(s).`, () => {
+        undone = true; setUndoToast(null); loadData();
+        setM({ok:true,text:'Undo successful — teachers restored.'});
+        setTimeout(()=>setM(null),3000);
+      });
+      setTimeout(async () => {
+        if(undone) return;
+        let ok=0, fail=0;
+        for(const id of savedIds){ try{ await api.delete(`/office/teachers/${id}`); ok++; }catch(_){ fail++; } }
+        loadData();
+        if(fail>0){ setM({ok:false,text:`Deleted ${ok}, ${fail} failed.`}); setTimeout(()=>setM(null),4000); }
+      }, 5000);
     };
 
     const filtered = teachers.filter(t=>
@@ -612,6 +741,7 @@
 
     return (
       <div>
+        {undoToast && <UndoToast message={undoToast.message} onUndo={undoToast.onUndo} onDismiss={()=>{ setUndoToast(null); if(undoTimerRef.current) clearTimeout(undoTimerRef.current); }}/>}
         {m&&<div style={msg(m.ok)}>{m.ok?<Check size={13}/>:<X size={13}/>} {m.text}</div>}
 
         {editTeacher&&(
@@ -675,7 +805,7 @@
 
         {!editTeacher&&(
           <div style={card}>
-            <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Teacher</div>
+            <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px' }}>Add New Teacher</div>
             <form onSubmit={handleAdd}>
               <div style={{ marginBottom:'10px',padding:'8px 12px',background:'#e8f4fd',border:'1px solid #b8d9f5',borderRadius:'7px',fontSize:'12px',color:'#1a5a7a',display:'flex',alignItems:'center',gap:'6px' }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1a5a7a" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -696,7 +826,7 @@
 
         <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px' }}><Users size={14}/> Teacher Directory</div>
         <SearchBar value={search} onChange={setSearch} placeholder="Search by name, ID or course..."/>
-        <BulkBar count={selIds.length} onDelete={handleBulkDelete} onClear={()=>setSelIds([])}/>
+              <BulkBar count={selIds.length} onEdit={selIds.length===1?()=>openEdit(teachers.find(t=>t.id===selIds[0])):null} onDelete={handleBulkDelete} onClear={()=>setSelIds([])}/>
         <div style={{ borderRadius:'10px',overflow:'hidden',border:'1px solid #e0e8ed' }}>
           <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
             <thead><tr style={{ background:'#2d4a5a',color:'white' }}>
@@ -720,12 +850,7 @@
                   </td>
                   <td style={{ padding:'10px 14px' }}>
                     <div style={{ display:'flex',gap:'6px' }}>
-                      <button onClick={()=>openEdit(t)} style={{ background:editTeacher?.id===t.id?'#2d4a5a':'transparent',color:editTeacher?.id===t.id?'white':'#2d4a5a',border:'1px solid #2d4a5a',padding:'5px 14px',borderRadius:'6px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'5px' }}>
-                        <Pencil size={11}/> {editTeacher?.id===t.id?'Editing':'Edit'}
-                      </button>
-                      <button onClick={()=>handleDelete(t)} style={{ background:'transparent',color:'#dc2626',border:'1px solid #fca5a5',padding:'5px 10px',borderRadius:'6px',fontSize:'11px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center' }}>
-                        <Trash2 size={11}/>
-                      </button>
+                      <span style={{ fontSize:'10px',color:'#aabbc8',fontStyle:'italic' }}>Click row to select</span>
                     </div>
                   </td>
                 </tr>
@@ -767,7 +892,7 @@
     const [subjects,   setSubjects]  = useState([]);
     const [teachers,   setTeachers]  = useState([]);
     const [selTeachers,setSelTeach]  = useState([]);
-    const [form, setForm] = useState({ code:'',name:'',short_name:'',credit_hours:3,credit_format:'3+0',has_lab:false,major_code:'',department_id:'' });
+    const [form, setForm] = useState({ code:'',name:'',short_name:'',credit_hours:3,credit_format:'3+0',has_lab:false,major_codes:[],department_id:'' });
     const [codeErr,    setCodeErr]   = useState('');
     const [depts,      setDepts]     = useState([]);
     const [m,          setM]         = useState(null);
@@ -779,11 +904,13 @@
     const [editSelT,   setEditSelT]  = useState([]);
     const [editCodeErr,setEditCodeErr]=useState('');
     const [selIds,     setSelIds]    = useState([]);
+    const [undoToast,  setUndoToast] = useState(null);
+    const undoTimerRef = React.useRef(null);
 
     const MAJORS = [
-      { code:'CS', label:'Computer Science' },
-      { code:'SE', label:'Software Engineering' },
-      { code:'DS', label:'Data Science' },
+    { code:'CS', label:'Computer Science' },
+    { code:'SE', label:'Software Engineering' },
+    { code:'DS', label:'Data Science' },
     ];
 
     const CREDIT_FORMATS = [
@@ -800,7 +927,7 @@
     };
 
     const loadData = () => {
-      api.get('/office/subjects').then(r=>setSubjects(r.data));
+      api.get('/office/subjects').then(r=>setSubjects(r.data)).catch(()=>{});
       api.get('/office/teachers').then(r=>setTeachers(r.data));
     };
     useEffect(()=>{
@@ -823,17 +950,17 @@
       const err = validateCode(form.code);
       if(err){ setCodeErr(err); return; }
       try{
-        if(!form.major_code){ setM({ok:false,text:'Please select a major for this course.'}); return; }
-        const dept = depts.find(d=>d.code===form.major_code);
+        if(!form.major_codes||form.major_codes.length===0){ setM({ok:false,text:'Please select at least one major for this course.'}); return; }
+        const dept = form.major_codes.length===1 ? depts.find(d=>d.code===form.major_codes[0]) : null;
         const fmt = getCreditFormat(form.credit_format||'3+0');
-        const r=await api.post('/office/subjects',{ ...form, department_id: dept?.id||null, credit_format:form.credit_format, credit_hours:fmt.theory+fmt.lab, has_lab:fmt.has_lab });
+        const r=await api.post('/office/subjects',{ ...form, major_codes:form.major_codes, department_id: dept?.id||null, credit_format:form.credit_format, credit_hours:fmt.theory+fmt.lab, has_lab:fmt.has_lab });
         for(const tid of selTeachers){
           try{ await api.post('/assignments/teacher-subjects',{teacher_id:tid,subject_id:r.data.id}); }catch(_){}
         }
         loadData();
         const teacherMsg = selTeachers.length>0 ? `with ${selTeachers.length} teacher(s)` : '(no supervisor assigned)';
         setM({ok:true,text:`Course added ${teacherMsg}.`});
-        setForm({code:'',name:'',short_name:'',credit_hours:3,credit_format:'3+0',has_lab:false,major_code:'',department_id:''});
+        setForm({code:'',name:'',short_name:'',credit_hours:3,credit_format:'3+0',has_lab:false,major_codes:[],department_id:''});
         setSelTeach([]); setCodeErr('');
       }catch(err){ setM({ok:false,text:err.response?.data?.message||'Error'}); }
       setTimeout(()=>setM(null),3500);
@@ -849,7 +976,7 @@
         !s.has_lab && s.credit_hours === 2 ? '2+0' :
         s.has_lab && s.credit_hours === 0 ? '0+3' : '3+0'
       );
-      setEditForm({ code:s.code||'', name:s.name, short_name:s.short_name||'', credit_hours:s.credit_hours, credit_format:fmt, has_lab:s.has_lab, major_code:s.major_code||'', department_id:s.department_id||'' });
+      setEditForm({ code:s.code||'', name:s.name, short_name:s.short_name||'', credit_hours:s.credit_hours, credit_format:fmt, has_lab:s.has_lab, major_codes:s.major_codes||[], department_id:s.department_id||'' });
       try{
         const r=await api.get('/assignments/teacher-subjects',{params:{subject_id:s.id}});
         setEditTeachers(r.data); setEditSelT(r.data.map(x=>x.teacher_id));
@@ -861,9 +988,9 @@
       if(codeChanged){ const err = validateCode(editForm.code); if(err){ setEditCodeErr(err); return; } }
       const isFYPCourse = /fyp|final.year.project/i.test((editForm.name||editCourse.name)+' '+(editForm.code||editCourse.code));
       try{
-        const dept = editForm.major_code ? depts.find(d=>d.code===editForm.major_code) : null;
+        const dept = (editForm.major_codes||[]).length===1 ? depts.find(d=>d.code===editForm.major_codes[0]) : null;
         const fmt = getCreditFormat(editForm.credit_format||'3+0');
-        await api.put(`/office/subjects/${editCourse.id}`,{ ...editForm, department_id: dept?.id||editForm.department_id||null, credit_format:editForm.credit_format, credit_hours:fmt.theory+fmt.lab, has_lab:fmt.has_lab });
+        await api.put(`/office/subjects/${editCourse.id}`,{ ...editForm, major_codes:editForm.major_codes||[], department_id: dept?.id||editForm.department_id||null, credit_format:editForm.credit_format, credit_hours:fmt.theory+fmt.lab, has_lab:fmt.has_lab });
         const current = editTeachers.map(t=>t.teacher_id);
         const toAdd   = editSelT.filter(id=>!current.includes(id));
         const toRemove= editTeachers.filter(t=>!editSelT.includes(t.teacher_id));
@@ -874,27 +1001,50 @@
       setTimeout(()=>setM(null),3500);
     };
 
+    const showUndo = (message, undoFn) => {
+      if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setUndoToast({ message, onUndo: undoFn });
+      undoTimerRef.current = setTimeout(() => setUndoToast(null), 5000);
+    };
+
     const handleDelete = async s => {
-      if(!window.confirm(`Delete course "${s.name}"? This will also remove it from all batch and timetable assignments.`)) return;
-      try{
-        await api.delete(`/office/subjects/${s.id}`);
-        setSelIds(p=>p.filter(x=>x!==s.id));
-        setEditCourse(null); loadData();
-        setM({ok:true,text:`Course "${s.name}" deleted.`});
-      }catch(err){ setM({ok:false,text:err.response?.data?.message||'Error deleting.'}); }
-      setTimeout(()=>setM(null),3500);
+      if(!window.confirm(`Delete course "${s.name}"? You'll have 5 seconds to undo.`)) return;
+      setSelIds(p=>p.filter(x=>x!==s.id));
+      setEditCourse(null);
+      setSubjects(prev=>prev.filter(x=>x.id!==s.id));
+      let undone = false;
+      showUndo(`Course "${s.name}" deleted.`, () => {
+        undone = true; setUndoToast(null); loadData();
+        setM({ok:true,text:`Undo successful — "${s.name}" restored.`});
+        setTimeout(()=>setM(null),3000);
+      });
+      setTimeout(async () => {
+        if(undone) return;
+        try{ await api.delete(`/office/subjects/${s.id}`); loadData(); }
+        catch(err){ setM({ok:false,text:err.response?.data?.message||'Error deleting.'}); loadData(); setTimeout(()=>setM(null),3500); }
+      }, 5000);
     };
 
     const handleBulkDelete = async () => {
-      const names = subjects.filter(s=>selIds.includes(s.id)).map(s=>s.name).join(', ');
-      if(!window.confirm(`Delete ${selIds.length} course(s):\n${names}\n\nThis will also remove them from all batch and timetable assignments.`)) return;
-      let ok=0, fail=0;
-      for(const id of selIds){
-        try{ await api.delete(`/office/subjects/${id}`); ok++; }catch(_){ fail++; }
-      }
-      setSelIds([]); setEditCourse(null); loadData();
-      setM({ok:fail===0,text:`Deleted ${ok} course(s)${fail>0?`, ${fail} failed`:''}.`});
-      setTimeout(()=>setM(null),4000);
+      const targets = subjects.filter(s=>selIds.includes(s.id));
+      const names = targets.map(s=>s.name).join(', ');
+      if(!window.confirm(`Delete ${selIds.length} course(s):\n${names}\n\nYou'll have 5 seconds to undo.`)) return;
+      const savedIds = [...selIds];
+      setSelIds([]); setEditCourse(null);
+      setSubjects(prev=>prev.filter(s=>!savedIds.includes(s.id)));
+      let undone = false;
+      showUndo(`Deleted ${savedIds.length} course(s).`, () => {
+        undone = true; setUndoToast(null); loadData();
+        setM({ok:true,text:'Undo successful — courses restored.'});
+        setTimeout(()=>setM(null),3000);
+      });
+      setTimeout(async () => {
+        if(undone) return;
+        let ok=0, fail=0;
+        for(const id of savedIds){ try{ await api.delete(`/office/subjects/${id}`); ok++; }catch(_){ fail++; } }
+        loadData();
+        if(fail>0){ setM({ok:false,text:`Deleted ${ok}, ${fail} failed.`}); setTimeout(()=>setM(null),4000); }
+      }, 5000);
     };
 
     const filtered = subjects.filter(s=>
@@ -910,6 +1060,7 @@
 
     return (
       <div>
+        {undoToast && <UndoToast message={undoToast.message} onUndo={undoToast.onUndo} onDismiss={()=>{ setUndoToast(null); if(undoTimerRef.current) clearTimeout(undoTimerRef.current); }}/>}
         {m&&<div style={msg(m.ok)}>{m.ok?<Check size={13}/>:<X size={13}/>} {m.text}</div>}
 
         {editCourse&&(
@@ -929,7 +1080,19 @@
             </div>
             <div style={{ marginBottom:'12px' }}>
               <label style={fl}>Major</label>
-              <select style={fi} value={editForm.major_code||''} onChange={e=>setEditForm(f=>({...f,major_code:e.target.value}))}>
+              {/* Major multi-select in edit modal */}
+              <div style={{ display:'flex',gap:'8px',flexWrap:'wrap',padding:'8px 10px',border:'1px solid #dde3e8',borderRadius:'6px',background:'white',marginBottom:'4px' }}>
+                {MAJORS.map(m=>(
+                  <label key={m.code} style={{ display:'flex',alignItems:'center',gap:'5px',cursor:'pointer',fontSize:'11px',color:'#1a2e3a',fontWeight:'500',padding:'3px 8px',borderRadius:'4px',background:(editForm.major_codes||[]).includes(m.code)?'#e8f4fd':'#f8fafc',border:'1px solid '+(editForm.major_codes||[]).includes(m.code)?'#b8d9f5':'#e0e8ed' }}>
+                    <input type="checkbox" checked={(editForm.major_codes||[]).includes(m.code)}
+                      onChange={e=>setEditForm(f=>({ ...f, major_codes: e.target.checked ? [...(f.major_codes||[]),m.code] : (f.major_codes||[]).filter(x=>x!==m.code) }))}
+                      style={{ accentColor:'#1a5a7a',width:'12px',height:'12px' }}/>
+                    {m.code}
+                  </label>
+                ))}
+              </div>
+              {/* hidden — kept for compat but replaced by major_codes */}
+              <select style={{ display:'none' }} value={editForm.major_code||''} onChange={e=>setEditForm(f=>({...f,major_code:e.target.value}))}>
                 <option value="">-- Not assigned --</option>
                 {MAJORS.map(m=><option key={m.code} value={m.code}>{m.label} ({m.code})</option>)}
               </select>
@@ -974,7 +1137,7 @@
 
         {!editCourse&&(
           <div style={card}>
-            <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Course</div>
+            <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px' }}>Add New Course</div>
             <form onSubmit={handleSubmit}>
               <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 2fr 1fr',gap:'12px',marginBottom:'12px' }}>
                 <CourseCodeField value={form.code} onChange={v=>onCodeChange(v,val=>setForm(f=>({...f,code:val})),setCodeErr)} errMsg={codeErr}/>
@@ -982,12 +1145,19 @@
                 <div><label style={fl}>Short Name</label><input style={fi} placeholder="OOP" value={form.short_name} onChange={e=>setForm(f=>({...f,short_name:e.target.value}))}/></div>
               </div>
               <div style={{ marginBottom:'12px' }}>
-                <label style={fl}>Major *</label>
-                <select style={fi} required value={form.major_code} onChange={e=>setForm(f=>({...f,major_code:e.target.value}))}>
-                  <option value="">-- Select Major --</option>
-                  {MAJORS.map(m=><option key={m.code} value={m.code}>{m.label} ({m.code})</option>)}
-                </select>
-                {!form.major_code&&<div style={{ fontSize:'10px',color:'#7a9aaa',marginTop:'4px' }}>Select the major this course belongs to</div>}
+                <label style={fl}>Major(s) * <span style={{ fontWeight:'400',textTransform:'none',color:'#7a9aaa' }}>(select all that apply)</span></label>
+                <div style={{ display:'flex',gap:'10px',flexWrap:'wrap',padding:'10px 12px',border:'1px solid #dde3e8',borderRadius:'6px',background:'white' }}>
+                  {MAJORS.map(m=>(
+                    <label key={m.code} style={{ display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',fontSize:'12px',color:'#1a2e3a',fontWeight:'500',padding:'4px 10px',borderRadius:'5px',background:(form.major_codes||[]).includes(m.code)?'#e8f4fd':'#f8fafc',border:'1px solid '+(form.major_codes||[]).includes(m.code)?'#b8d9f5':'#e0e8ed',transition:'all 0.15s' }}>
+                      <input type="checkbox" checked={(form.major_codes||[]).includes(m.code)}
+                        onChange={e=>setForm(f=>({ ...f, major_codes: e.target.checked ? [...(f.major_codes||[]),m.code] : (f.major_codes||[]).filter(x=>x!==m.code) }))}
+                        style={{ accentColor:'#1a5a7a',width:'13px',height:'13px' }}/>
+                      {m.label} <span style={{ color:'#7a9aaa',fontSize:'10px' }}>({m.code})</span>
+                    </label>
+                  ))}
+                </div>
+                {(!form.major_codes||form.major_codes.length===0)&&<div style={{ fontSize:'10px',color:'#d97706',marginTop:'4px' }}>Select at least one major</div>}
+                {form.major_codes&&form.major_codes.length>1&&<div style={{ fontSize:'10px',color:'#16a34a',marginTop:'4px' }}>Shared course — will appear for all selected majors when assigning to batches</div>}
               </div>
               <div style={{ marginBottom:'14px' }}>
                 <label style={fl}>Credit Hour Format *</label>
@@ -1048,7 +1218,7 @@
             <span style={{ fontSize:'11px',color:'#7a9aaa' }}>{filtered.length} course{filtered.length!==1?'s':''}</span>
           </div>
         )}
-        <BulkBar count={selIds.length} onDelete={handleBulkDelete} onClear={()=>setSelIds([])}/>
+              <BulkBar count={selIds.length} onEdit={selIds.length===1?()=>openEdit(subjects.find(s=>s.id===selIds[0])):null} onDelete={handleBulkDelete} onClear={()=>setSelIds([])}/>
         <div style={{ borderRadius:'10px',overflow:'hidden',border:'1px solid #e0e8ed' }}>
           <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
             <thead>
@@ -1067,8 +1237,8 @@
                   <td style={{ padding:'10px 14px',fontWeight:'600',color:'#1a2e3a' }}>{s.name}</td>
                   <td style={{ padding:'10px 14px' }}><span style={{ background:'#e8f4fd',color:'#1a5a7a',border:'1px solid #b8d9f5',borderRadius:'10px',padding:'2px 9px',fontSize:'10px',fontWeight:'600' }}>{s.short_name}</span></td>
                   <td style={{ padding:'10px 14px' }}>
-                    {s.major_code
-                      ?<span style={{ background:'#f0f4f7',color:'#2d4a5a',border:'1px solid #c8d8e0',borderRadius:'6px',padding:'2px 9px',fontSize:'10px',fontWeight:'700' }}>{s.major_code}</span>
+                    {(s.major_codes&&s.major_codes.length>0)
+                      ?<span style={{ background:'#f0f4f7',color:'#2d4a5a',border:'1px solid #c8d8e0',borderRadius:'6px',padding:'2px 9px',fontSize:'10px',fontWeight:'700' }}>{s.major_codes.join(', ')}</span>
                       :<span style={{ color:'#aabbc8',fontSize:'11px' }}>—</span>
                     }
                   </td>
@@ -1083,12 +1253,7 @@
                   <td style={{ padding:'10px 14px',textAlign:'center' }}>{s.has_lab?<Check size={14} color="#16a34a"/>:<X size={14} color="#aabbc8"/>}</td>
                   <td style={{ padding:'10px 14px' }}>
                     <div style={{ display:'flex',gap:'6px' }}>
-                      <button onClick={()=>openEdit(s)} style={{ background:editCourse?.id===s.id?'#2d4a5a':'transparent',color:editCourse?.id===s.id?'white':'#2d4a5a',border:'1px solid #2d4a5a',padding:'5px 12px',borderRadius:'6px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'4px' }}>
-                        <Pencil size={11}/> {editCourse?.id===s.id?'Editing':'Edit'}
-                      </button>
-                      <button onClick={()=>handleDelete(s)} style={{ background:'transparent',color:'#dc2626',border:'1px solid #fca5a5',padding:'5px 10px',borderRadius:'6px',fontSize:'11px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center' }}>
-                        <Trash2 size={11}/>
-                      </button>
+                      <span style={{ fontSize:'10px',color:'#aabbc8',fontStyle:'italic' }}>Click to select</span>
                     </div>
                   </td>
                 </tr>
@@ -1112,6 +1277,10 @@
     const [viewRoom,    setViewRoom]    = useState(null);
     const [schedule,    setSchedule]    = useState([]);
     const [schedLoading,setSchedLoading]= useState(false);
+    const [selIds,      setSelIds]      = useState([]);
+    const [search,      setSearch]      = useState('');
+    const [undoToast,   setUndoToast]   = useState(null);
+    const undoTimerRef = React.useRef(null);
 
     const DAYS  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
     const SLOTS = [
@@ -1143,6 +1312,59 @@
       }catch(e){ alert('Error updating room.'); }
     };
 
+    const loadRooms = () => api.get('/office/rooms').then(r=>setRooms(r.data));
+
+    const showUndo = (message, undoFn) => {
+      if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setUndoToast({ message, onUndo: undoFn });
+      undoTimerRef.current = setTimeout(() => setUndoToast(null), 5000);
+    };
+
+    const handleDelete = async r => {
+      if(!window.confirm(`Delete room "${r.room_id}"? You'll have 5 seconds to undo.`)) return;
+      setEditId(null); setSelIds(p=>p.filter(x=>x!==r.id));
+      setRooms(prev=>prev.filter(x=>x.id!==r.id));
+      let undone = false;
+      showUndo(`Room "${r.room_id}" deleted.`, () => {
+        undone = true; setUndoToast(null); loadRooms();
+        setM({ok:true,text:`Undo — "${r.room_id}" restored.`}); setTimeout(()=>setM(null),3000);
+      });
+      setTimeout(async () => {
+        if(undone) return;
+        try{ await api.delete(`/office/rooms/${r.id}`); loadRooms(); }
+        catch(err){ setM({ok:false,text:err.response?.data?.message||'Error deleting.'}); loadRooms(); setTimeout(()=>setM(null),3500); }
+      }, 5000);
+    };
+
+    const handleBulkDelete = async () => {
+      const targets = rooms.filter(r=>selIds.includes(r.id));
+      if(!window.confirm(`Delete ${selIds.length} room(s): ${targets.map(r=>r.room_id).join(', ')}?\n\nYou'll have 5 seconds to undo.`)) return;
+      const savedIds = [...selIds];
+      setSelIds([]); setEditId(null);
+      setRooms(prev=>prev.filter(r=>!savedIds.includes(r.id)));
+      let undone = false;
+      showUndo(`Deleted ${savedIds.length} room(s).`, () => {
+        undone = true; setUndoToast(null); loadRooms();
+        setM({ok:true,text:'Undo successful — rooms restored.'}); setTimeout(()=>setM(null),3000);
+      });
+      setTimeout(async () => {
+        if(undone) return;
+        let ok=0, fail=0;
+        for(const id of savedIds){ try{ await api.delete(`/office/rooms/${id}`); ok++; }catch(_){ fail++; } }
+        loadRooms();
+        if(fail>0){ setM({ok:false,text:`Deleted ${ok}, ${fail} failed.`}); setTimeout(()=>setM(null),4000); }
+      }, 5000);
+    };
+
+    const filteredRooms = rooms.filter(r=>
+      r.room_id?.toLowerCase().includes(search.toLowerCase()) ||
+      r.room_name?.toLowerCase().includes(search.toLowerCase()) ||
+      r.room_type?.toLowerCase().includes(search.toLowerCase())
+    );
+    const allChecked = filteredRooms.length>0 && filteredRooms.every(r=>selIds.includes(r.id));
+    const toggleAll  = () => allChecked ? setSelIds(p=>p.filter(id=>!filteredRooms.map(r=>r.id).includes(id))) : setSelIds(p=>[...new Set([...p,...filteredRooms.map(r=>r.id)])]);
+    const toggleRow  = id => setSelIds(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+
     const openModal = async room => {
       setViewRoom(room); setSchedule([]); setSchedLoading(true);
       try{ const r = await api.get('/office/room-schedule',{params:{room_id:room.id}}); setSchedule(r.data||[]); }
@@ -1166,8 +1388,9 @@
 
     return (
       <div>
+        {undoToast && <UndoToast message={undoToast.message} onUndo={undoToast.onUndo} onDismiss={()=>{ setUndoToast(null); if(undoTimerRef.current) clearTimeout(undoTimerRef.current); }}/>}
         <div style={card}>
-          <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px' }}><Plus size={15}/> Add New Classroom</div>
+          <div style={{ fontSize:'14px',fontWeight:'700',color:'#1a2e3a',marginBottom:'16px' }}>Add New Classroom</div>
           {m&&<div style={msg(m.ok)}>{m.ok?<Check size={13}/>:<X size={13}/>} {m.text}</div>}
           <form onSubmit={handleAdd}>
             <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px',marginBottom:'14px' }}>
@@ -1184,44 +1407,65 @@
           </form>
         </div>
 
-        <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px' }}>
+        <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px' }}>
           <Building2 size={14}/> Classroom Status <span style={{ fontSize:'11px',color:'#7a9aaa',fontWeight:'400' }}>— click a room to view its timetable</span>
         </div>
-        <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:'12px' }}>
-          {rooms.map(r=>(
-            <div key={r.id} style={{ background:'white',border:`1.5px solid ${editId===r.id?'#2d4a5a':'#c8d8e0'}`,borderRadius:'10px',padding:'14px',transition:'all 0.15s',cursor:editId===r.id?'default':'pointer' }}
-              onClick={()=>{ if(editId!==r.id) openModal(r); }}>
-              {editId===r.id?(
-                <div onClick={e=>e.stopPropagation()}>
-                  <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px' }}><Pencil size={12}/> {r.room_id}</div>
-                  <div style={{ marginBottom:'8px' }}><label style={fl}>Capacity</label><input style={fi} type="number" value={editForm.capacity} onChange={e=>setEditForm(f=>({...f,capacity:parseInt(e.target.value)}))}/></div>
-                  <div style={{ marginBottom:'12px' }}><label style={fl}>Type</label>
-                    <select style={fi} value={editForm.room_type} onChange={e=>setEditForm(f=>({...f,room_type:e.target.value}))}>
-                      <option value="classroom">Classroom</option><option value="lab">Lab</option><option value="auditorium">Auditorium</option>
-                    </select>
-                  </div>
-                  <div style={{ display:'flex',gap:'6px' }}>
-                    <button onClick={()=>handleUpd(r.id)} style={{ flex:1,background:'#16a34a',color:'white',border:'none',padding:'7px',borderRadius:'6px',fontSize:'11px',fontWeight:'700',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'4px' }}><Check size={11}/> Save</button>
-                    <button onClick={()=>setEditId(null)} style={{ background:'#f0f4f7',color:'#5a7080',border:'1px solid #dde3e8',padding:'7px 10px',borderRadius:'6px',fontSize:'11px',cursor:'pointer',display:'flex',alignItems:'center' }}><X size={11}/></button>
-                  </div>
-                </div>
-              ):(
-                <>
-                  <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px' }}>
-                    <div style={{ fontSize:'15px',fontWeight:'800',color:'#1a2e3a' }}>{r.room_id}</div>
-                    <div style={{ width:'24px',height:'24px',background:'#f0f6fa',borderRadius:'6px',display:'flex',alignItems:'center',justifyContent:'center' }}><TypeIcon type={r.room_type} size={13} color="#2d4a5a"/></div>
-                  </div>
-                  <div style={{ fontSize:'11px',color:'#5a7080',marginBottom:'2px' }}>Capacity: <strong style={{ color:'#1a2e3a' }}>{r.capacity}</strong></div>
-                  <div style={{ fontSize:'11px',color:'#5a7080',marginBottom:'12px',textTransform:'capitalize' }}>Type: <strong style={{ color:'#1a2e3a' }}>{r.room_type}</strong></div>
-                  <button onClick={e=>{ e.stopPropagation(); setEditId(r.id); setEditForm({capacity:r.capacity,room_type:r.room_type}); }}
-                    style={{ width:'100%',background:'#2d4a5a',color:'white',border:'none',padding:'7px',borderRadius:'6px',fontSize:'11px',fontWeight:'700',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'5px' }}>
-                    <Pencil size={11}/> Edit
-                  </button>
-                </>
-              )}
+        <SearchBar value={search} onChange={setSearch} placeholder="Search by room ID, name or type..."/>
+        <BulkBar count={selIds.length}
+          onEdit={selIds.length===1 ? ()=>{ const r=rooms.find(x=>x.id===selIds[0]); setEditId(r.id); setEditForm({capacity:r.capacity,room_type:r.room_type}); setSelIds([]); } : null}
+          onDelete={handleBulkDelete} onClear={()=>setSelIds([])}/>
+
+        {editId&&(
+          <div style={{ ...card,border:'2px solid #2d4a5a',marginBottom:'16px' }}>
+            <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'14px' }}>
+              <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',display:'flex',alignItems:'center',gap:'7px' }}><Pencil size={14}/> Editing: {rooms.find(r=>r.id===editId)?.room_id}</div>
+              <button onClick={()=>setEditId(null)} style={{ background:'#f0f4f7',border:'1px solid #dde3e8',color:'#5a7080',borderRadius:'6px',padding:'4px 10px',fontSize:'11px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'4px' }}><X size={11}/> Cancel</button>
             </div>
-          ))}
-          {rooms.length===0&&<div style={{ gridColumn:'1/-1',padding:'28px',textAlign:'center',color:'#aabbc8',fontSize:'12px' }}>No rooms found.</div>}
+            <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'14px' }}>
+              <div><label style={fl}>Capacity</label><input style={fi} type="number" value={editForm.capacity} onChange={e=>setEditForm(f=>({...f,capacity:parseInt(e.target.value)}))}/></div>
+              <div><label style={fl}>Type</label>
+                <select style={fi} value={editForm.room_type} onChange={e=>setEditForm(f=>({...f,room_type:e.target.value}))}>
+                  <option value="classroom">Classroom</option><option value="lab">Lab</option><option value="auditorium">Auditorium</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display:'flex',gap:'10px' }}>
+              <button onClick={()=>handleUpd(editId)} style={{ ...btn,background:'#16a34a' }}><Check size={13}/> Save Changes</button>
+              <button onClick={()=>handleDelete(rooms.find(r=>r.id===editId))} style={{ ...btn,background:'#dc2626' }}><Trash2 size={13}/> Delete Room</button>
+              <button onClick={()=>setEditId(null)} style={{ padding:'9px 18px',border:'1px solid #dde3e8',borderRadius:'7px',background:'white',color:'#5a7080',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit' }}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        <div style={{ borderRadius:'10px',overflow:'hidden',border:'1px solid #e0e8ed' }}>
+          <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
+            <thead><tr style={{ background:'#2d4a5a',color:'white' }}>
+              <HeadCheck allSelected={allChecked} onToggleAll={toggleAll}/>
+              {['Room ID','Room Name','Capacity','Type','Action'].map(h=>(
+                <th key={h} style={{ padding:'10px 14px',textAlign:'left',fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px' }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {filteredRooms.map(r=>(
+                <tr key={r.id} style={{ borderBottom:'0.5px solid #e8edf0',background:selIds.includes(r.id)?'#fef2f2':editId===r.id?'#f0f6fa':'white',cursor:'pointer',transition:'background 0.1s' }}
+                  onClick={()=>openModal(r)}
+                  onMouseEnter={e=>{ if(!selIds.includes(r.id)&&editId!==r.id) e.currentTarget.style.background='#f8fafc'; }}
+                  onMouseLeave={e=>{ if(!selIds.includes(r.id)&&editId!==r.id) e.currentTarget.style.background='white'; }}>
+                  <RowCheck id={r.id} selected={selIds} onToggle={toggleRow}/>
+                  <td style={{ padding:'10px 14px' }}><strong style={{ fontFamily:'monospace',color:'#2d4a5a' }}>{r.room_id}</strong></td>
+                  <td style={{ padding:'10px 14px',color:'#1a2e3a' }}>{r.room_name||r.room_id}</td>
+                  <td style={{ padding:'10px 14px',color:'#5a7080' }}>{r.capacity}</td>
+                  <td style={{ padding:'10px 14px',textTransform:'capitalize' }}>
+                    <span style={{ background:'#f0f4f7',color:'#2d4a5a',border:'1px solid #c8d8e0',borderRadius:'8px',padding:'2px 9px',fontSize:'10px',fontWeight:'600' }}>{r.room_type}</span>
+                  </td>
+                  <td style={{ padding:'10px 14px' }} onClick={e=>e.stopPropagation()}>
+                    <span style={{ fontSize:'10px',color:'#aabbc8',fontStyle:'italic' }}>Select to edit/delete</span>
+                  </td>
+                </tr>
+              ))}
+              {filteredRooms.length===0&&<tr><td colSpan="6" style={{ padding:'28px',textAlign:'center',color:'#aabbc8' }}>{search?'No rooms match your search.':'No rooms found.'}</td></tr>}
+            </tbody>
+          </table>
         </div>
 
         {viewRoom&&(
@@ -1386,7 +1630,7 @@
             </select>
           </div>
           <SearchBar value={search} onChange={setSearch} placeholder="Search by name, student ID or batch..."/>
-          <BulkBar count={selIds.length} onDelete={handleBulkDelete} onClear={()=>setSelIds([])}/>
+                <BulkBar count={selIds.length} onEdit={selIds.length===1?()=>{ const s=students.find(x=>x.id===selIds[0]); setEditStu(s); setEditForm({full_name:s.full_name,email:s.email||'',batch_id:s.batch_id||'',department_id:s.department_id||''}); setSelIds([]); }:null} onDelete={handleBulkDelete} onClear={()=>setSelIds([])}/>
           <div style={{ borderRadius:'10px',overflow:'hidden',border:'1px solid #e0e8ed' }}>
             <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
               <thead><tr style={{ background:'#2d4a5a',color:'white' }}>
@@ -1405,16 +1649,7 @@
                     <td style={{ padding:'9px 14px',color:'#5a7080' }}>{s.department_name||'—'}</td>
                     <td style={{ padding:'9px 14px',color:'#8fa5b0',fontSize:'11px' }}>{new Date(s.enrollment_date||s.created_at).toLocaleDateString()}</td>
                     <td style={{ padding:'9px 14px' }}>
-                      <div style={{ display:'flex',gap:'6px' }}>
-                        <button onClick={()=>{ setEditStu(s); setEditForm({full_name:s.full_name,email:s.email||'',batch_id:s.batch_id||'',department_id:s.department_id||''}); }}
-                          style={{ background:'transparent',border:'1px solid #2d4a5a',color:'#2d4a5a',padding:'4px 12px',borderRadius:'6px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'4px' }}>
-                          <Pencil size={11}/> Edit
-                        </button>
-                        <button onClick={()=>handleDelete(s)}
-                          style={{ background:'transparent',color:'#dc2626',border:'1px solid #fca5a5',padding:'4px 10px',borderRadius:'6px',fontSize:'11px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center' }}>
-                          <Trash2 size={11}/>
-                        </button>
-                      </div>
+                      <span style={{ fontSize:'10px',color:'#aabbc8',fontStyle:'italic' }}>Select to edit/delete</span>
                     </td>
                   </tr>
                 ))}
