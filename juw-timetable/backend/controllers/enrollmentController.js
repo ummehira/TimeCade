@@ -231,4 +231,27 @@ const bulkEnroll = async (req, res) => {
   }
 };
 
-module.exports = { getStudents, enrollStudent, updateStudent, bulkEnroll };
+// DELETE /api/enrollment/:id
+const deleteStudent = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get the student's user_id before deleting
+    const studentRes = await pool.query('SELECT user_id FROM students WHERE id=$1', [id]);
+    if (!studentRes.rows.length) {
+      return res.status(404).json({ message: 'Student not found.' });
+    }
+    const userId = studentRes.rows[0].user_id;
+
+    // Delete from students first (child), then users (parent)
+    await pool.query('DELETE FROM students WHERE id=$1', [id]);
+    await pool.query('DELETE FROM users WHERE id=$1', [userId]);
+
+    res.json({ message: 'Student deleted successfully.' });
+  } catch (err) {
+    console.error('deleteStudent:', err);
+    res.status(500).json({ message: 'Server error: ' + err.message });
+  }
+};
+
+module.exports = { getStudents, enrollStudent, updateStudent, bulkEnroll, deleteStudent };
