@@ -38,8 +38,8 @@ function StudentSidebar() {
           style={{ width:'44px',height:'44px',borderRadius:'10px',objectFit:'contain',background:'rgba(255,255,255,0.12)',padding:'4px',display:'block',margin:'0 auto 8px' }}
           onError={e=>{ e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}
         />
-        <div style={{ display:'none',width:'44px',height:'44px',background:'rgba(255,255,255,0.15)',borderRadius:'10px',alignItems:'center',justifyContent:'center',fontSize:'20px',fontWeight:'800',color:'white',margin:'0 auto 8px' }}>T</div>
-        <div style={{ color:'white',fontSize:'14px',fontWeight:'700',textAlign:'center',lineHeight:1 }}>Timecade</div>
+        <div style={{ display:'none',width:'44px',height:'44px',background:'rgba(255,255,255,0.15)',borderRadius:'10px',alignItems:'center',justifyContent:'center',fontSize:'14px',fontWeight:'800',color:'white',margin:'0 auto 8px' }}>ASA</div>
+        <div style={{ color:'white',fontSize:'12px',fontWeight:'700',textAlign:'center',lineHeight:1 }}>Academic Scheduler Agent</div>
         <div style={{ color:'rgba(255,255,255,0.45)',fontSize:'10px',marginTop:'3px',textAlign:'center' }}>CS &amp; SE Department</div>
       </div>
       <nav style={{ flex:1,padding:'10px 8px' }}>

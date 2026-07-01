@@ -37,7 +37,7 @@ export default function Sidebar({ navItems, pendingCount = 0 }) {
             end={!!exact}
             className={({ isActive }) => isActive ? 'active' : ''}
           >
-            <Icon size={16} />
+            <Icon size={12} />
             {label}
             {label === 'Approvals' && pendingCount > 0 && (
               <span className="pending-count">{pendingCount}</span>
