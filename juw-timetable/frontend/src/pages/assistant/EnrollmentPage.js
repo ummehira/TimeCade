@@ -1,6 +1,6 @@
 // frontend/src/pages/assistant/EnrollmentPage.js
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Upload, Plus, Download, X, CheckCircle, AlertTriangle, FileSpreadsheet } from 'lucide-react';
+import { Users, Upload, Plus, Download, X, CheckCircle, AlertTriangle, FileSpreadsheet, Trash2 } from 'lucide-react';
 import api from '../../utils/api';
 
 // ── shared field styles ───────────────────────────────────────────────────
@@ -26,6 +26,17 @@ export default function EnrollmentPage() {
   const loadStudents = (bid = filterBatch) => {
     const params = bid ? { batch_id: bid } : {};
     api.get('/enrollment', { params }).then(r => setStudents(r.data)).catch(() => {});
+  };
+
+  const handleDelete = async (student) => {
+    if (!window.confirm(`Delete student "${student.full_name}" (${student.student_id})? This cannot be undone.`)) return;
+    try {
+      await api.delete(`/enrollment/${student.id}`);
+      showMsg(true, `Student "${student.full_name}" deleted successfully.`);
+      loadStudents();
+    } catch (err) {
+      showMsg(false, err.response?.data?.message || 'Failed to delete student.');
+    }
   };
 
   useEffect(() => { loadStudents(); }, [filterBatch]);
@@ -75,7 +86,7 @@ export default function EnrollmentPage() {
           <table style={{ width:'100%',borderCollapse:'collapse',fontSize:'12px' }}>
             <thead>
               <tr style={{ background:'#2d4a5a',color:'white' }}>
-                {['Student ID','Full Name','Batch','Department','Enrolled On'].map(h => (
+                {['Student ID','Full Name','Batch','Department','Enrolled On','Actions'].map(h => (
                   <th key={h} style={{ padding:'10px 14px',textAlign:'left',fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px' }}>{h}</th>
                 ))}
               </tr>
@@ -88,10 +99,19 @@ export default function EnrollmentPage() {
                   <td style={{ padding:'10px 14px' }}><span style={{ background:'#e8f4fd',color:'#1a5a7a',border:'1px solid #b8d9f5',borderRadius:'10px',padding:'2px 9px',fontSize:'10px',fontWeight:'600' }}>{s.batch_name}</span></td>
                   <td style={{ padding:'10px 14px',color:'#5a7080',fontSize:'12px' }}>{s.department_name||'—'}</td>
                   <td style={{ padding:'10px 14px',color:'#8fa5b0',fontSize:'11px' }}>{new Date(s.enrollment_date||s.created_at).toLocaleDateString()}</td>
+                  <td style={{ padding:'10px 14px' }}>
+                    <button
+                      onClick={() => handleDelete(s)}
+                      title="Delete student"
+                      style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',borderRadius:'6px',padding:'5px 10px',cursor:'pointer',display:'flex',alignItems:'center',gap:'4px',fontSize:'11px',fontWeight:'600',fontFamily:'inherit' }}
+                    >
+                      <Trash2 size={12}/> Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
               {students.length === 0 && (
-                <tr><td colSpan="5" style={{ padding:'32px',textAlign:'center',color:'#aabbc8',fontSize:'13px' }}>No students enrolled yet.</td></tr>
+                <tr><td colSpan="6" style={{ padding:'32px',textAlign:'center',color:'#aabbc8',fontSize:'13px' }}>No students enrolled yet.</td></tr>
               )}
             </tbody>
           </table>

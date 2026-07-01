@@ -34,12 +34,12 @@ function StudentSidebar() {
   return (
     <aside style={{ width:'200px',background:'#2d4a5a',display:'flex',flexDirection:'column',position:'fixed',top:0,left:0,height:'100vh',zIndex:100,boxShadow:'2px 0 12px rgba(0,0,0,0.15)' }}>
       <div style={{ padding:'16px 14px',borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',flexDirection:'column',alignItems:'center' }}>
-        <img src="/logo.png" alt="Academic Scheduler Agent"
+        <img src="/logo.png" alt="Timecade"
           style={{ width:'44px',height:'44px',borderRadius:'10px',objectFit:'contain',background:'rgba(255,255,255,0.12)',padding:'4px',display:'block',margin:'0 auto 8px' }}
           onError={e=>{ e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}
         />
         <div style={{ display:'none',width:'44px',height:'44px',background:'rgba(255,255,255,0.15)',borderRadius:'10px',alignItems:'center',justifyContent:'center',fontSize:'20px',fontWeight:'800',color:'white',margin:'0 auto 8px' }}>T</div>
-        <div style={{ color:'white',fontSize:'9px',fontWeight:'700',textAlign:'center',lineHeight:1.2 }}>Academic Scheduler Agent</div>
+        <div style={{ color:'white',fontSize:'14px',fontWeight:'700',textAlign:'center',lineHeight:1 }}>Timecade</div>
         <div style={{ color:'rgba(255,255,255,0.45)',fontSize:'10px',marginTop:'3px',textAlign:'center' }}>CS &amp; SE Department</div>
       </div>
       <nav style={{ flex:1,padding:'10px 8px' }}>

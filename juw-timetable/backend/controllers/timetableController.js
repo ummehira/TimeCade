@@ -56,8 +56,8 @@ const getTimetable = async (req, res) => {
     } else {
       if (batch_id)   { params.push(batch_id);   where += ` AND t.batch_id=$${params.length}`; }
       if (teacher_id) { params.push(teacher_id); where += ` AND t.teacher_id=$${params.length}`; }
-      // Show all classes for the batch regardless of session filter
-      // Session/semester is informational only in the timetable view
+      if (semester)   { params.push(semester);   where += ` AND t.semester=$${params.length}`; }
+
     }
 
     const result = await pool.query(
@@ -144,7 +144,7 @@ async function enrichRequestData(data) {
 // POST /api/timetable
 const createEntry = async (req, res) => {
   try {
-    const { batch_id, subject_id, teacher_id, room_id, day, time_slot, is_lab, semester } = req.body;
+    const { batch_id, subject_id, teacher_id, room_id, day, time_slot, is_lab, semester, is_shared } = req.body;
     // Check if this is an FYP course — teacher is optional for FYP
     const subjectRes = await pool.query('SELECT has_lab, name, code FROM subjects WHERE id=$1', [subject_id]);
     const isFYP = /fyp|final.year.project/i.test((subjectRes.rows[0]?.name||'')+' '+(subjectRes.rows[0]?.code||''));
@@ -163,12 +163,11 @@ const createEntry = async (req, res) => {
       });
     }
 
-    const conflicts = await detectConflicts({ batch_id, teacher_id: teacher_id||null, room_id, day, time_slot });
+    // Pass subject_id so conflictService can allow shared lectures (same subject, same room, same slot)
+    const conflicts = await detectConflicts({ batch_id, subject_id, teacher_id: teacher_id||null, room_id, day, time_slot, is_shared: is_shared||false });
     if (conflicts.length) return res.status(409).json({ message: 'Conflict detected', conflicts });
 
     const slot_label = getSlotLabel(time_slot, finalIsLab);
-
-
 
     const finalTeacherId = teacher_id || null;  // null for FYP courses
     const result = await pool.query(
@@ -205,7 +204,8 @@ const updateEntry = async (req, res) => {
     const { batch_id, subject_id, teacher_id, room_id, day, time_slot, is_lab } = req.body;
 
     const finalTeacherId = teacher_id || null;
-    const conflicts = await detectConflicts({ batch_id, teacher_id: finalTeacherId, room_id, day, time_slot, exclude_id: id });
+    // Pass subject_id so conflictService can allow shared lectures (same subject, same room, same slot)
+    const conflicts = await detectConflicts({ batch_id, subject_id, teacher_id: finalTeacherId, room_id, day, time_slot, exclude_id: id });
     if (conflicts.length) return res.status(409).json({ message: 'Conflict detected', conflicts });
 
     const slot_label = getSlotLabel(time_slot, is_lab);
@@ -239,8 +239,9 @@ const deleteEntry = async (req, res) => {
 // POST /api/timetable/check-conflicts
 const checkConflicts = async (req, res) => {
   try {
-    const { batch_id, teacher_id, room_id, day, time_slot, exclude_id } = req.body;
-    const conflicts = await detectConflicts({ batch_id, teacher_id, room_id, day, time_slot, exclude_id });
+    const { batch_id, subject_id, teacher_id, room_id, day, time_slot, exclude_id, is_shared } = req.body;
+    // Pass subject_id so conflictService can allow shared lectures (same subject, same room, same slot)
+    const conflicts = await detectConflicts({ batch_id, subject_id, teacher_id, room_id, day, time_slot, exclude_id, is_shared: is_shared||false });
     res.json({ hasConflict: conflicts.length > 0, conflicts });
   } catch (err) {
     res.status(500).json({ message: 'Server error.' });

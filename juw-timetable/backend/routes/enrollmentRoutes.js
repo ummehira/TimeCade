@@ -2,7 +2,7 @@
 const express = require('express');
 const router  = express.Router();
 const multer  = require('multer');
-const { getStudents, enrollStudent, updateStudent, bulkEnroll } = require('../controllers/enrollmentController');
+const { getStudents, enrollStudent, updateStudent, bulkEnroll, deleteStudent } = require('../controllers/enrollmentController');
 const { authenticate, authorize } = require('../middleware/authMiddleware');
 
 const canEnroll = authorize('office_assistant');
@@ -12,5 +12,6 @@ router.get  ('/',     authenticate, canEnroll, getStudents);
 router.post ('/',     authenticate, canEnroll, enrollStudent);
 router.post ('/bulk', authenticate, canEnroll, upload.single('file'), bulkEnroll);
 router.put  ('/:id',  authenticate, canEnroll, updateStudent);
+router.delete('/:id', authenticate, canEnroll, deleteStudent);
 
 module.exports = router;
