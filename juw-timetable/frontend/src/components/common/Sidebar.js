@@ -24,7 +24,7 @@ export default function Sidebar({ navItems, pendingCount = 0 }) {
       {/* Logo */}
       <div className="sidebar-logo">
         <div className="sidebar-logo-icon">T</div>
-        <div className="sidebar-logo-name">Timecade</div>
+        <div className="sidebar-logo-name">Academic Scheduler Agent</div>
         <div className="sidebar-logo-sub">{user?.department_name || 'CS & SE Department'}</div>
       </div>
 
