@@ -385,7 +385,7 @@ function SearchableSelect({ label, value, onChange, options, placeholder='All' }
 }
 
 // ── Timetable Grid — Days vertical, Times horizontal ─────────────────────
-function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, onDelete }) {
+function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, onDelete, showBatch=false }) {
   const [dragOver,  setDragOver]  = useState(null);
   const [editEntry, setEditEntry] = useState(null);
   const dragRef = useRef(null);
@@ -505,6 +505,9 @@ function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, 
                               </div>
                               <div style={{ opacity:0.85,fontSize:'9px',overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis' }}>{entry.teacher_name?.split(' ').slice(0,3).join(' ')}</div>
                               <div style={{ opacity:0.75,fontSize:'9px',marginTop:'1px' }}>{entry.room_code}</div>
+                              {showBatch&&entry.batch_name&&(
+                                <div style={{ opacity:0.75,fontSize:'9px',marginTop:'1px' }}>{entry.batch_name}</div>
+                              )}
                               <div style={{ opacity:0.6,fontSize:'8.5px',marginTop:'1px',fontStyle:'italic' }}>{entry.slot_label}</div>
                               {canEdit&&(
                                 <div style={{ position:'absolute',bottom:'3px',right:'3px',background:'rgba(255,255,255,0.18)',borderRadius:'4px',padding:'1px 5px',fontSize:'8px',fontWeight:'600' }}>
@@ -536,8 +539,182 @@ function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, 
   );
 }
 
+// ── View mode tabs ────────────────────────────────────────────────────────
+function ViewTabs({ viewMode, setViewMode }) {
+  const tabs = [
+    { id:'batch',   label:'Batch-wise'   },
+    { id:'teacher', label:'Teacher-wise' },
+    { id:'room',    label:'Room-wise'    },
+  ];
+  return (
+    <div style={{ display:'flex',gap:'6px',padding:'14px 20px 0 20px',background:'white',borderBottom:'1px solid #e0e8ed' }}>
+      {tabs.map(t=>{
+        const active = viewMode===t.id;
+        return (
+          <button key={t.id} onClick={()=>setViewMode(t.id)}
+            style={{
+              padding:'9px 16px',border:'none',borderBottom:active?`2.5px solid ${CELL_NAVY}`:'2.5px solid transparent',
+              background:'transparent',color:active?CELL_NAVY:'#7a9aaa',fontSize:'12.5px',fontWeight:active?'700':'600',
+              cursor:'pointer',fontFamily:'inherit',marginBottom:'-1px',transition:'color 0.15s'
+            }}>
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Empty state for teacher/room views ───────────────────────────────────
+function NoTimetableState({ text }) {
+  return (
+    <div className="empty-state">
+      <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <h3>No timetable available</h3>
+      <p>{text}</p>
+    </div>
+  );
+}
+
+// ── Teacher-wise Timetable View ──────────────────────────────────────────
+function TeacherWiseView({ teachers }) {
+  const [selTeacher, setSelTeacher] = useState('');
+  const [entries,    setEntries]    = useState([]);
+  const [loading,    setLoading]    = useState(false);
+  const [loaded,     setLoaded]     = useState(false);
+
+  useEffect(()=>{
+    if(!selTeacher){ setEntries([]); setLoaded(false); return; }
+    setLoading(true); setLoaded(false);
+    api.get('/office/teacher-schedule',{ params:{ teacher_id:selTeacher } })
+      .then(r=>{ setEntries(r.data); setLoaded(true); })
+      .catch(()=>{ setEntries([]); setLoaded(true); })
+      .finally(()=>setLoading(false));
+  },[selTeacher]);
+
+  const selTeacherObj = teachers.find(t=>String(t.id)===String(selTeacher));
+
+  return (
+    <>
+      <div style={{ padding:'16px 20px',borderBottom:'1px solid #e0e8ed',background:'white' }}>
+        <div style={{ display:'flex',alignItems:'center',gap:'7px',marginBottom:'12px' }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2d4a5a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7"/></svg>
+          <span style={{ fontSize:'12px',fontWeight:'700',color:'#1a2e3a' }}>Teacher-wise Timetable</span>
+          <div style={{ flex:1,height:'1px',background:'#e0e8ed',marginLeft:'4px' }}/>
+          {selTeacher && loaded && (
+            <div style={{ display:'flex',alignItems:'center',gap:'10px' }}>
+              <span style={{ fontSize:'11px',color:'#7a9aaa',background:'#f0f4f7',padding:'3px 10px',borderRadius:'10px' }}>
+                {entries.length} class{entries.length!==1?'es':''}
+              </span>
+              {entries.length>0 && (
+                <ExportButtons
+                  entries={entries}
+                  title={selTeacherObj?.full_name||'Teacher'}
+                  subtitle="Teacher Timetable · CS & SE Department"
+                  filename={`${(selTeacherObj?.full_name||'Teacher').replace(/\s+/g,'_')}_Timetable`}
+                  size="sm"
+                />
+              )}
+            </div>
+          )}
+        </div>
+        <div style={{ display:'flex',flexDirection:'column',gap:'4px',maxWidth:'320px' }}>
+          <span style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px' }}>Teacher</span>
+          <SearchSelect
+            placeholder="-- Select Teacher --"
+            value={selTeacher}
+            onChange={v=>setSelTeacher(v)}
+            options={teachers.map(t=>({ value:t.id, label:t.full_name }))}
+          />
+        </div>
+      </div>
+
+      <div style={{ padding:'16px 20px' }}>
+        {!selTeacher ? (
+          <NoTimetableState text="Select a teacher above to view their complete timetable" />
+        ) : loading ? (
+          <div className="empty-state"><p>Loading timetable...</p></div>
+        ) : entries.length===0 ? (
+          <NoTimetableState text={`No timetable is currently available for ${selTeacherObj?.full_name||'this teacher'}`} />
+        ) : (
+          <TimetableGrid entries={entries} canEdit={false} showBatch={true} />
+        )}
+      </div>
+    </>
+  );
+}
+
+// ── Room-wise Timetable View ─────────────────────────────────────────────
+function RoomWiseView({ rooms }) {
+  const [selRoom, setSelRoom] = useState('');
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded,  setLoaded]  = useState(false);
+
+  useEffect(()=>{
+    if(!selRoom){ setEntries([]); setLoaded(false); return; }
+    setLoading(true); setLoaded(false);
+    api.get('/office/room-schedule',{ params:{ room_id:selRoom } })
+      .then(r=>{ setEntries(r.data); setLoaded(true); })
+      .catch(()=>{ setEntries([]); setLoaded(true); })
+      .finally(()=>setLoading(false));
+  },[selRoom]);
+
+  const selRoomObj = rooms.find(r=>String(r.id)===String(selRoom));
+
+  return (
+    <>
+      <div style={{ padding:'16px 20px',borderBottom:'1px solid #e0e8ed',background:'white' }}>
+        <div style={{ display:'flex',alignItems:'center',gap:'7px',marginBottom:'12px' }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2d4a5a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M9 22V12h6v10"/></svg>
+          <span style={{ fontSize:'12px',fontWeight:'700',color:'#1a2e3a' }}>Room-wise Timetable</span>
+          <div style={{ flex:1,height:'1px',background:'#e0e8ed',marginLeft:'4px' }}/>
+          {selRoom && loaded && (
+            <div style={{ display:'flex',alignItems:'center',gap:'10px' }}>
+              <span style={{ fontSize:'11px',color:'#7a9aaa',background:'#f0f4f7',padding:'3px 10px',borderRadius:'10px' }}>
+                {entries.length} class{entries.length!==1?'es':''}
+              </span>
+              {entries.length>0 && (
+                <ExportButtons
+                  entries={entries}
+                  title={selRoomObj?.room_name||selRoomObj?.room_id||'Room'}
+                  subtitle="Room Timetable · CS & SE Department"
+                  filename={`${(selRoomObj?.room_id||'Room').replace(/\s+/g,'_')}_Timetable`}
+                  size="sm"
+                />
+              )}
+            </div>
+          )}
+        </div>
+        <div style={{ display:'flex',flexDirection:'column',gap:'4px',maxWidth:'320px' }}>
+          <span style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px' }}>Room / Lab</span>
+          <SearchSelect
+            placeholder="-- Select Room --"
+            value={selRoom}
+            onChange={v=>setSelRoom(v)}
+            options={rooms.map(r=>({ value:r.id, label:`${r.room_id}${r.room_name?` — ${r.room_name}`:''} (${r.room_type||'classroom'}, cap ${r.capacity})` }))}
+          />
+        </div>
+      </div>
+
+      <div style={{ padding:'16px 20px' }}>
+        {!selRoom ? (
+          <NoTimetableState text="Select a room or lab above to view its complete timetable" />
+        ) : loading ? (
+          <div className="empty-state"><p>Loading timetable...</p></div>
+        ) : entries.length===0 ? (
+          <NoTimetableState text={`No timetable is currently available for ${selRoomObj?.room_id||'this room'}`} />
+        ) : (
+          <TimetableGrid entries={entries} canEdit={false} showBatch={true} />
+        )}
+      </div>
+    </>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────
 export default function TimetablePage({ canEdit=false }) {
+  const [viewMode,      setViewMode]      = useState('batch'); // 'batch' | 'teacher' | 'room'
   const [batches,       setBatches]       = useState([]);
   const [rooms,         setRooms]         = useState([]);
   const [teachers,      setTeachers]      = useState([]);
@@ -676,6 +853,12 @@ export default function TimetablePage({ canEdit=false }) {
       )}
 
       <div className="card">
+        <ViewTabs viewMode={viewMode} setViewMode={setViewMode}/>
+
+        {viewMode==='teacher' && <div className="card-body" style={{ padding:0 }}><TeacherWiseView teachers={teachers}/></div>}
+        {viewMode==='room'    && <div className="card-body" style={{ padding:0 }}><RoomWiseView rooms={rooms}/></div>}
+
+        {viewMode==='batch' && (
         <div className="card-body" style={{ padding:0 }}>
 
           {/* ── Filter Bar ── */}
@@ -800,6 +983,7 @@ export default function TimetablePage({ canEdit=false }) {
             )}
           </div>
         </div>
+        )}
       </div>
     </div>
   );

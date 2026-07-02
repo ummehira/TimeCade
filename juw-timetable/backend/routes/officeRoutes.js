@@ -347,6 +347,47 @@ router.get('/room-schedule', authenticate, async (req, res) => {
   }
 });
 
+// ── Teacher Schedule ──────────────────────────────────────────────────────
+router.get('/teacher-schedule', authenticate, async (req, res) => {
+  try {
+    const { teacher_id } = req.query;
+    if (!teacher_id) return res.status(400).json({ message: 'teacher_id is required.' });
+    const result = await pool.query(
+      `SELECT t.id, t.day, t.time_slot::int AS time_slot, t.is_lab,
+              CASE WHEN t.is_lab THEN
+                CASE t.time_slot::int
+                  WHEN 1 THEN '9:00 - 12:00 (Lab)' WHEN 2 THEN '10:00 - 1:00 (Lab)'
+                  WHEN 3 THEN '11:00 - 2:00 (Lab)' WHEN 4 THEN '12:00 - 3:00 (Lab)'
+                  WHEN 5 THEN '1:00 - 4:00 (Lab)' ELSE t.slot_label END
+              ELSE
+                CASE t.time_slot::int
+                  WHEN 1 THEN '9:00 - 10:00' WHEN 2 THEN '10:00 - 11:00'
+                  WHEN 3 THEN '11:00 - 12:00' WHEN 4 THEN '12:00 - 1:00'
+                  WHEN 5 THEN '1:00 - 2:00' ELSE t.slot_label END
+              END AS slot_label,
+              b.id AS batch_id, b.batch_name, b.major_code,
+              s.id AS subject_id, s.name AS subject_name, s.short_name,
+              te.id AS teacher_id, te.full_name AS teacher_name,
+              r.id AS room_id, r.room_id AS room_code, r.capacity
+       FROM timetable t
+       JOIN batches  b  ON t.batch_id   = b.id
+       JOIN subjects s  ON t.subject_id = s.id
+       JOIN teachers te ON t.teacher_id = te.id
+       LEFT JOIN rooms r ON t.room_id   = r.id
+       WHERE te.id = $1
+       ORDER BY CASE t.day
+         WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3
+         WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 WHEN 'Saturday' THEN 6
+       END, t.time_slot::int`,
+      [teacher_id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('getTeacherSchedule:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
 // ── Batch Timetable ───────────────────────────────────────────────────────
 router.get('/batch-timetable', authenticate, async (req, res) => {
   try {
