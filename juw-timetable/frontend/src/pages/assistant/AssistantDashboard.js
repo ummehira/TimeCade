@@ -1,7 +1,7 @@
 // frontend/src/pages/assistant/AssistantDashboard.js
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Calendar, Building2, LogOut, Settings } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, LogOut, Settings, Bot } from 'lucide-react';
 import { useResponsive } from '../../hooks/useResponsive';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
@@ -11,11 +11,13 @@ import ProfileModal from '../../components/common/ProfileModal';
 import AssistantHome from './AssistantHome';
 import TimetablePage from './TimetablePage';
 import OfficeMgmtPage from './OfficeMgmtPage';
+import AssistantAgentPage from './AssistantAgentPage';
 
 const NAV = [
   { to:'/assistant',           label:'Dashboard',         icon:LayoutDashboard, exact:true },
   { to:'/assistant/timetable', label:'Timetable',         icon:Calendar },
   { to:'/assistant/office',    label:'Resource Management', icon:Building2 },
+  { to:'/assistant/agent',     label:'AI Agent',          icon:Bot },
 ];
 
 export default function AssistantDashboard() {
@@ -132,6 +134,7 @@ export default function AssistantDashboard() {
           <Route index            element={<><TopHeader title="Dashboard"         icon={LayoutDashboard} onMenuClick={isMobile ? () => setSidebarOpen(o => !o) : null}/><AssistantHome/></>}/>
           <Route path="timetable" element={<><TopHeader title="Timetable"         icon={Calendar}        onMenuClick={isMobile ? () => setSidebarOpen(o => !o) : null}/><TimetablePage canEdit={true}/></>}/>
           <Route path="office/*"  element={<><TopHeader title="Resource Management" icon={Building2}       onMenuClick={isMobile ? () => setSidebarOpen(o => !o) : null}/><OfficeMgmtPage tab={officeTab}/></>}/>
+          <Route path="agent"     element={<><TopHeader title="Assistant AI Agent" icon={Bot}             onMenuClick={isMobile ? () => setSidebarOpen(o => !o) : null}/><AssistantAgentPage/></>}/>
         </Routes>
       </div>
     </div>

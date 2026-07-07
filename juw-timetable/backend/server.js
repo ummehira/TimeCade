@@ -29,6 +29,7 @@ app.use('/api/enrollment',  require('./routes/enrollmentRoutes'));
 app.use('/api/notifications',require('./routes/notificationRoutes'));
 app.use('/api/assignments', require('./routes/assignmentRoutes'));
 app.use('/api/teacher-agent', require('./routes/teacherAgentRoutes'));
+app.use('/api/assistant-agent', require('./routes/assistantAgentRoutes'));
 
 // ── Health Check ────────────────────────────
 app.get('/api/health', (req, res) => {
