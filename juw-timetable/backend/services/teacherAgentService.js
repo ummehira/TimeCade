@@ -125,6 +125,13 @@ function isLabText(text) {
   return /\blab\b|laboratory|3\s*hour|three\s*hour/i.test(text);
 }
 
+function requestedRoomName(text) {
+  const value = String(text || '');
+  const roomMatch = value.match(/\b(room|lab|laboratory)\s+([a-z0-9\-()]+)/i);
+  if (!roomMatch) return null;
+  return `${roomMatch[1]} ${roomMatch[2]}`.trim();
+}
+
 function getRescheduleParts(text) {
   const match = String(text).match(/\b(?:to|into)\b/i);
   if (!match) return { sourceText: text, targetText: text };
@@ -772,6 +779,16 @@ async function handleTeacherAgentMessage({ user, message }) {
     const rows = [];
     const conflicts = [];
     const slotsToCheck = range?.slots?.length ? range.slots : [slot];
+
+    const requestedRoom = requestedRoomName(text);
+    if (requestedRoom && !room) {
+      return response({
+        intent: 'availability_check',
+        summary: `${requestedRoom} was not found in the university room database. Please check the room name/code and try again.`,
+        rows: [],
+        conflicts: [{ type: 'room_not_found', message: `${requestedRoom} does not exist in the rooms table.` }],
+      });
+    }
 
     if (room) {
       for (const s of slotsToCheck) {
