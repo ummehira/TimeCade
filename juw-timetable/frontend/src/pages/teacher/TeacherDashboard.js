@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, NavLink, useNavigate } from 'react-router-dom';
 import { Menu } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { LayoutDashboard, Calendar, LogOut, Clock, BookOpen, Users, Building2, Settings } from 'lucide-react';
 import ProfileModal from '../../components/common/ProfileModal';
 import { useResponsive } from '../../hooks/useResponsive';
@@ -10,6 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import TopHeader from '../../components/common/TopHeader';
 import ExportButtons from '../../components/common/ExportButtons';
+import TeacherAgentPage from './TeacherAgentPage';
 
 
 const DAYS  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -40,6 +42,7 @@ function TeacherSidebar() {
     { to:'/teacher/schedule',      label:'My Schedule',    icon:Calendar },
     { to:'/teacher/all-batches',   label:'Batch Timetable',icon:Users },
     { to:'/teacher/all-rooms',     label:'Room Status',    icon:Building2 },
+    { to:'/teacher/agent', label:'AI Agent', icon:Bot },
   ];
   return (
     <>
@@ -636,6 +639,7 @@ export default function TeacherDashboard() {
           <Route path="schedule"   element={<TeacherSchedulePage/>}/>
           <Route path="all-batches" element={<AllBatchesPage/>}/>
           <Route path="all-rooms"  element={<RoomStatusPage/>}/>
+          <Route path="agent" element={<TeacherAgentPage />} />
         </Routes>
       </div>
     </div>
