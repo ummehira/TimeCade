@@ -459,6 +459,14 @@ async function getWeeklyFreePeriods({ teacherId }) {
   return rows;
 }
 
+function getTeachingLoadByDay(entries) {
+  return DAYS.map(day => {
+    const dayEntries = entries.filter(e => e.day === day);
+    const hours = dayEntries.reduce((total, e) => total + (e.is_lab ? 3 : 1), 0);
+    return { day, lectures: dayEntries.length, hours, entries: dayEntries };
+  });
+}
+
 async function getPendingRequests(userId) {
   return (await pool.query(
     `SELECT id, status, request_data, created_at, reviewed_at, review_note
@@ -529,7 +537,7 @@ async function handleTeacherAgentMessage({ user, message }) {
     });
   }
 
-  if (/\b(status|request status|approval|pending|approved|rejected)\b/.test(lower)) {
+  if (/\b(status|request status|approval|pending|approved|rejected|rescheduled|reschedule requests?)\b/.test(lower)) {
     const requests = await getPendingRequests(user.id);
     const filtered = lower.includes('pending') ? requests.filter(r => r.status === 'pending') : requests;
     return response({
@@ -549,7 +557,19 @@ async function handleTeacherAgentMessage({ user, message }) {
     });
   }
 
-  if (/\b(workload|how many lectures|lectures do i have)\b/.test(lower)) {
+  if (/\b(highest teaching load|most teaching load|busiest day|which day has.*teaching load)\b/.test(lower)) {
+    const loads = getTeachingLoadByDay(entries);
+    const highest = loads.reduce((best, item) => item.hours > best.hours ? item : best, loads[0]);
+    return response({
+      intent: 'highest_teaching_load',
+      summary: highest.hours
+        ? `${highest.day} has your highest teaching load: ${highest.lectures} lecture${highest.lectures === 1 ? '' : 's'} and about ${highest.hours} teaching hour${highest.hours === 1 ? '' : 's'}.`
+        : 'No teaching load was found in your timetable.',
+      rows: highest.entries.map(formatEntry),
+    });
+  }
+
+  if (/\b(workload|teaching load|how many lectures|lectures do i have)\b/.test(lower)) {
     const filtered = day ? entries.filter(e => e.day === day) : entries;
     const labCount = filtered.filter(e => e.is_lab).length;
     const hours = filtered.reduce((total, e) => total + (e.is_lab ? 3 : 1), 0);
@@ -573,6 +593,21 @@ async function handleTeacherAgentMessage({ user, message }) {
           : 'Please mention the exact course name so I can find its assigned classroom.',
         missing: ['course'],
         rows: [],
+      });
+    }
+    if (day && entry.day !== day) {
+      const dayMatch = entries.find(e => Number(e.subject_id) === Number(entry.subject_id) && e.day === day);
+      if (!dayMatch) {
+        return response({
+          intent: 'assigned_classroom_for_course',
+          summary: `${entry.subject_name} is not scheduled for you on ${day}.`,
+          rows: [],
+        });
+      }
+      return response({
+        intent: 'assigned_classroom_for_course',
+        summary: `${dayMatch.subject_name} is assigned to ${dayMatch.room_code} today at ${dayMatch.slot_label}.`,
+        rows: [formatEntry(dayMatch)],
       });
     }
     return response({
@@ -624,6 +659,16 @@ async function handleTeacherAgentMessage({ user, message }) {
   }
 
   if (/\b(suggest|nearest|conflict-free|missed lecture)\b/.test(lower) && /\b(slot|time)\b/.test(lower)) {
+    if (/\bmeeting|students|student meeting|office hour\b/.test(lower)) {
+      const rows = day
+        ? await getFreePeriods({ day, teacherId: teacher.id })
+        : await getWeeklyFreePeriods({ teacherId: teacher.id });
+      return response({
+        intent: 'meeting_slot',
+        summary: rows.length ? 'Here are free 1-hour slots you can use for meeting students.' : 'No free 1-hour meeting slots were found.',
+        rows: rows.slice(0, 10).map(r => ({ ...r, teacher: teacher.full_name })),
+      });
+    }
     const entry = await findEntryByCourse(entries, text) || entries[0];
     if (!entry) {
       return response({
@@ -746,6 +791,19 @@ async function handleTeacherAgentMessage({ user, message }) {
       intent: 'assigned_courses',
       summary: rows.length ? 'These are your assigned courses from scheduled timetable records.' : 'No assigned scheduled courses were found.',
       rows: rows.map(formatEntry),
+    });
+  }
+
+  if (/\b(today|tomorrow|weekly|week|schedule|timetable|lecture|lectures|class|classes|timing|summary)\b/.test(lower)) {
+    const course = await findCourse(text, teacher.id);
+    const filtered = course
+      ? entries.filter(e => Number(e.subject_id) === Number(course.id) && (!day || e.day === day))
+      : (lower.includes('weekly') || lower.includes('week') ? entries : (day ? entries.filter(e => e.day === day) : entries));
+    const summaryDay = day ? ` for ${day}` : '';
+    return response({
+      intent: 'view_timetable',
+      summary: filtered.length ? `Here are your scheduled classes${summaryDay} from the latest timetable records.` : `No scheduled classes were found${summaryDay}.`,
+      rows: filtered.map(formatEntry),
     });
   }
 
@@ -930,18 +988,6 @@ async function handleTeacherAgentMessage({ user, message }) {
       summary: conflicts.length ? 'Availability checked. Conflicts were found.' : 'Availability checked. No conflicts were found.',
       rows,
       conflicts,
-    });
-  }
-
-  if (/\b(today|tomorrow|weekly|week|schedule|timetable|lecture|timing|classes)\b/.test(lower)) {
-    const course = await findCourse(text, teacher.id);
-    const filtered = course
-      ? entries.filter(e => Number(e.subject_id) === Number(course.id))
-      : (lower.includes('weekly') || lower.includes('week') ? entries : (day ? entries.filter(e => e.day === day) : entries));
-    return response({
-      intent: 'view_timetable',
-      summary: filtered.length ? 'Here is the latest timetable information from the database.' : 'No scheduled classes were found for that request.',
-      rows: filtered.map(formatEntry),
     });
   }
 
