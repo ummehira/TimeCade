@@ -37,7 +37,7 @@ export default function LoginPage() {
         <div className="login-logo">
           <div style={{ width:'44px',height:'44px',background:'rgba(255,255,255,0.15)',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',fontWeight:'800',color:'white',margin:'0 auto 8px' }}>ASA</div>
           <h2>Academic Scheduler Agent</h2>
-          <p>Jinnah University for Women</p>
+         
         </div>
 
 

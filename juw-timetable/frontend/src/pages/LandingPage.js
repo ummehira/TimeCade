@@ -343,12 +343,11 @@ export default function LandingPage() {
           padding: isMobile ? '100px 20px 40px' : '80px 8% 60px',
           gap: isMobile ? '32px' : '5%' }}>
           <div style={{ flex:1, maxWidth: isMobile ? '100%' : '520px', textAlign: isMobile ? 'center' : 'left' }}>
-            <div style={S.heroTag}>CS &amp; SE Department</div>
             <h1 style={S.heroH1}>
               Schedules in<br />perfect cascade
             </h1>
             <p style={S.heroP}>
-              The ultimate timetable management system designed for Computer Science and Software Engineering departments. Manage classes, track conflicts, and optimise schedules effortlessly.
+                Transform the way your institution schedules. Manage timetables, prevent conflicts, and streamline every department from one powerful platform.
             </p>
             <div style={{ display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap', justifyContent: isMobile ? 'center' : 'flex-start' }}>
               <Link to="/login" style={{ textDecoration:'none' }}>
@@ -435,7 +434,7 @@ export default function LandingPage() {
           {/* Left: copy */}
           <div style={{ flex: 1 }}>
             <div style={S.aboutLabel}>About Academic Scheduler Agent</div>
-            <h2 style={S.aboutH2}>One platform,<br />four distinct roles</h2>
+            <h2 style={S.aboutH2}>One platform,<br />three distinct roles</h2>
             <p style={S.aboutP}>
               Every user gets exactly the view they need. Admins control the full schedule, Teachers track their sessions, and Students stay updated in real time.
             </p>
@@ -499,7 +498,7 @@ export default function LandingPage() {
                 <span style={S.footerBrand}>Academic Scheduler Agent</span>
               </div>
               <p style={S.footerP}>
-                Smart timetable management for CS &amp; SE departments. Manage schedules, resolve conflicts, and stay organised.
+                Smart timetable management system. Manage schedules, resolve conflicts, and stay organised.
               </p>
               <div style={S.footerSocials}>
                 <div style={S.socialBtn}>
@@ -558,7 +557,7 @@ export default function LandingPage() {
 
           {/* Bottom bar */}
           <div style={S.footerBottom}>
-            <span style={S.footerCopy}>2025 Academic Scheduler Agent. All rights reserved. Built for CS &amp; SE Department.</span>
+            <span style={S.footerCopy}>2025 Academic Scheduler Agent. All rights reserved.</span>
             <div style={S.footerLinks}>
               {['Privacy Policy', 'Terms of Use', 'Support'].map(l => (
                 <a key={l} href="#" style={S.footerSmLink}>{l}</a>
