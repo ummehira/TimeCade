@@ -1,38 +1,47 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
+import { Bot, Send, Sparkles, AlertTriangle, CheckCircle2, ClipboardList } from 'lucide-react';
 import api from '../../utils/api';
+import { useResponsive } from '../../hooks/useResponsive';
 
-const NAVY   = '#2d4a5a';
-const NAVY_D = '#223946';
-const GREEN  = '#3a6070';
+const quickPrompts = [
+  "Show today's timetable",
+  'Show my weekly timetable',
+  'What courses are assigned to me?',
+  'Find available classrooms on Monday slot 2',
+  'Show my reschedule request status',
+];
 
-// ── Small structured blocks rendered inside an agent bubble ──────────────
 function ResultTable({ rows }) {
   if (!rows?.length) return null;
-  const cols = ['Course', 'Batch', 'Teacher', 'Classroom', 'Day', 'Time', 'Availability', 'Conflict'];
-  const keys = ['course', 'batch', 'teacher', 'classroom', 'day', 'time', 'availabilityStatus', 'conflictStatus'];
+  const columns = ['course', 'batch', 'teacher', 'classroom', 'day', 'time', 'availabilityStatus', 'conflictStatus'];
+  const labels = {
+    course: 'Course',
+    batch: 'Batch',
+    teacher: 'Teacher',
+    classroom: 'Classroom',
+    day: 'Day',
+    time: 'Time',
+    availabilityStatus: 'Availability',
+    conflictStatus: 'Conflict',
+  };
   return (
-    <div style={{ marginTop: 10, overflowX: 'auto', borderRadius: 8, border: '1px solid #e0e8ed' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+    <div style={{ overflowX: 'auto', marginTop: 12 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720, fontSize: 12 }}>
         <thead>
-          <tr>
-            {cols.map(h => (
-              <th key={h} style={{
-                background: '#f0f4f7', color: '#5a7080', textTransform: 'uppercase',
-                letterSpacing: '0.4px', fontSize: 10, fontWeight: 700,
-                padding: '8px 10px', textAlign: 'left', whiteSpace: 'nowrap',
-                borderBottom: '1px solid #e0e8ed'
-              }}>
-                {h}
+          <tr style={{ background: '#2d4a5a', color: 'white' }}>
+            {columns.map(col => (
+              <th key={col} style={{ padding: '9px 10px', textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>
+                {labels[col]}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} style={{ borderTop: i ? '1px solid #f0f4f7' : 'none' }}>
-              {keys.map(k => (
-                <td key={k} style={{ padding: '8px 10px', color: '#1a2e3a', whiteSpace: 'nowrap' }}>
-                  {r[k] || '—'}
+          {rows.map((row, idx) => (
+            <tr key={row.id || idx} style={{ borderBottom: '1px solid #e8edf0' }}>
+              {columns.map(col => (
+                <td key={col} style={{ padding: '9px 10px', color: col === 'course' ? '#1a2e3a' : '#526b78', fontWeight: col === 'course' ? 700 : 500 }}>
+                  {row[col] || '-'}
                 </td>
               ))}
             </tr>
@@ -43,266 +52,245 @@ function ResultTable({ rows }) {
   );
 }
 
-function ConflictList({ conflicts }) {
-  if (!conflicts?.length) return null;
+function NoticeList({ title, items, tone }) {
+  if (!items?.length) return null;
+  const isConflict = tone === 'danger';
   return (
     <div style={{
-      marginTop: 10, background: '#fef2f2', border: '1px solid #fecaca',
-      borderRadius: 8, padding: '10px 12px'
+      marginTop: 12,
+      border: `1px solid ${isConflict ? '#fecaca' : '#b8d9f5'}`,
+      background: isConflict ? '#fef2f2' : '#eef7ff',
+      borderRadius: 8,
+      padding: 12,
     }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-        Conflicts
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: isConflict ? '#b91c1c' : '#1a5a7a', fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
+        {isConflict ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />}
+        {title}
       </div>
-      {conflicts.map((c, i) => (
-        <div key={i} style={{ fontSize: 12.5, color: '#9b1c1c', display: 'flex', gap: 6, marginBottom: 2 }}>
-          <span style={{ fontWeight: 700 }}>✕</span>{c.message}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function AlternativesList({ alternatives, onPick }) {
-  if (!alternatives?.length) return null;
-  return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#5a7080', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-        Suggested Alternatives
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {alternatives.map((a, i) => (
-          <button
-            key={i}
-            onClick={() => onPick?.(a)}
-            style={{
-              background: '#eaf2f6', border: `1px solid #cfe0e8`, color: NAVY,
-              borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 600,
-              cursor: onPick ? 'pointer' : 'default', fontFamily: 'inherit'
-            }}
-          >
-            {a.day} · {a.time} · {a.classroom}
-          </button>
+      <div style={{ display: 'grid', gap: 7 }}>
+        {items.map((item, idx) => (
+          <div key={idx} style={{ color: isConflict ? '#7f1d1d' : '#1d4f68', fontSize: 12, lineHeight: 1.45 }}>
+            {item.message || `${item.day || ''} ${item.time || ''} ${item.classroom || ''}`.trim()}
+          </div>
         ))}
       </div>
     </div>
   );
 }
 
-// ── Typing indicator ──────────────────────────────────────────────────────
+function AgentMessage({ message }) {
+  const isUser = message.role === 'user';
+  const data = message.data;
+  return (
+    <div style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', marginBottom: 14 }}>
+      <div style={{
+        width: isUser ? 'auto' : '100%',
+        maxWidth: isUser ? '78%' : '100%',
+        background: isUser ? '#2d4a5a' : 'white',
+        color: isUser ? 'white' : '#1a2e3a',
+        border: isUser ? 'none' : '1px solid #dde7ec',
+        borderRadius: 10,
+        padding: isUser ? '10px 13px' : 14,
+        boxShadow: isUser ? 'none' : '0 4px 12px rgba(36, 64, 80, 0.06)',
+      }}>
+        {isUser ? (
+          <div style={{ fontSize: 13, lineHeight: 1.45 }}>{message.text}</div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <Bot size={16} color="#2d4a5a" />
+              <span style={{ fontSize: 12, fontWeight: 800, color: '#2d4a5a' }}>Teacher AI Agent</span>
+              {data?.intent && <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: '#6b8794', background: '#f0f5f8', borderRadius: 999, padding: '3px 8px' }}>{data.intent.replace(/_/g, ' ')}</span>}
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.5, color: '#233844' }}>{data?.summary || message.text}</div>
+            <NoticeList title="Missing details" items={data?.missing?.map(m => ({ message: m }))} tone="info" />
+            <NoticeList title="Conflict status" items={data?.conflicts} tone="danger" />
+            <ResultTable rows={data?.rows} />
+            <NoticeList title="Suggested alternatives" items={data?.alternatives} tone="info" />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TypingBubble() {
+  const dot = (delay) => ({
+    width: 6,
+    height: 6,
+    borderRadius: '50%',
+    background: '#7a9aaa',
+    animation: `ttTyping 1.2s infinite ${delay}s`,
+  });
+
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 14 }}>
-      <Avatar />
+    <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 14 }}>
+      <style>{`
+        @keyframes ttTyping {
+          0%, 80%, 100% { opacity: .35; transform: translateY(0); }
+          40% { opacity: 1; transform: translateY(-4px); }
+        }
+      `}</style>
       <div style={{
-        background: 'white', border: '1px solid #e0e8ed', borderRadius: '14px 14px 14px 4px',
-        padding: '12px 16px', display: 'flex', gap: 4, alignItems: 'center'
+        maxWidth: 170,
+        background: 'white',
+        border: '1px solid #dde7ec',
+        borderRadius: '12px 12px 12px 4px',
+        padding: '11px 13px',
+        boxShadow: '0 4px 12px rgba(36, 64, 80, 0.06)',
       }}>
-        {[0, 1, 2].map(i => (
-          <span key={i} style={{
-            width: 6, height: 6, borderRadius: '50%', background: '#aabbc8',
-            display: 'inline-block', animation: `ta-bounce 1.2s ${i * 0.15}s infinite ease-in-out`
-          }} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function Avatar() {
-  return (
-    <div style={{
-      width: 30, height: 30, borderRadius: '50%', background: NAVY, flexShrink: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 2
-    }}>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="11" width="18" height="10" rx="2" />
-        <circle cx="12" cy="5" r="2" />
-        <line x1="12" y1="7" x2="12" y2="11" />
-        <line x1="8" y1="16" x2="8" y2="16" />
-        <line x1="16" y1="16" x2="16" y2="16" />
-      </svg>
-    </div>
-  );
-}
-
-// ── One chat bubble ───────────────────────────────────────────────────────
-function Bubble({ msg, onPickAlternative }) {
-  const isUser = msg.role === 'user';
-  if (isUser) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-        <div style={{
-          maxWidth: '72%', background: NAVY, color: 'white', borderRadius: '14px 14px 4px 14px',
-          padding: '11px 15px', fontSize: 13.5, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word'
-        }}>
-          {msg.text}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <Bot size={15} color="#2d4a5a" />
+          <span style={{ fontSize: 11, fontWeight: 800, color: '#2d4a5a' }}>Agent</span>
+        </div>
+        <div style={{ display: 'flex', gap: 5, alignItems: 'center', height: 10 }}>
+          <span style={dot(0)} />
+          <span style={dot(0.15)} />
+          <span style={dot(0.3)} />
         </div>
       </div>
-    );
-  }
-  return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 14 }}>
-      <Avatar />
-      <div style={{
-        maxWidth: '78%', background: 'white', border: msg.isError ? '1px solid #fecaca' : '1px solid #e0e8ed',
-        borderRadius: '14px 14px 14px 4px', padding: '12px 16px'
-      }}>
-        <div style={{ fontSize: 13.5, lineHeight: 1.55, color: msg.isError ? '#b91c1c' : '#1a2e3a' }}>
-          {msg.text}
-        </div>
-        <ResultTable rows={msg.rows} />
-        <ConflictList conflicts={msg.conflicts} />
-        <AlternativesList alternatives={msg.alternatives} onPick={onPickAlternative} />
-      </div>
     </div>
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────
 export default function TeacherAgentPage() {
+  const { isMobile } = useResponsive();
   const [messages, setMessages] = useState([
     {
       role: 'agent',
-      text: "Hi, I'm your timetable assistant. Ask me about your schedule, check your availability, or request a reschedule — for example: \u201cAm I free on Thursday at 11?\u201d or \u201cMove my DBMS class to Friday 10am.\u201d"
-    }
+      data: {
+        intent: 'ready',
+        summary: 'Ask me about your timetable, assigned courses, classroom availability, conflict-free alternatives, reschedule requests, or request status.',
+      },
+    },
   ]);
-  const [input, setInput]     = useState('');
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const bottomRef = useRef(null);
-  const taRef     = useRef(null);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
-
-  const send = async () => {
-    const text = input.trim();
-    if (!text || loading) return;
-
-    setMessages(m => [...m, { role: 'user', text }]);
+  const sendMessage = async (text) => {
+    const prompt = text.trim();
+    if (!prompt || loading) return;
+    setError('');
     setInput('');
-    if (taRef.current) taRef.current.style.height = 'auto';
+    setMessages(prev => [...prev, { role: 'user', text: prompt }]);
     setLoading(true);
-
     try {
-      const res = await api.post('/teacher-agent/message', { message: text });
-      const data = res.data || {};
-      setMessages(m => [...m, {
-        role: 'agent',
-        text: data.summary || 'Done.',
-        rows: data.rows,
-        conflicts: data.conflicts,
-        alternatives: data.alternatives,
-      }]);
+      const res = await api.post('/teacher-agent/message', { message: prompt });
+      setMessages(prev => [...prev, { role: 'agent', data: res.data }]);
     } catch (err) {
-      setMessages(m => [...m, {
-        role: 'agent',
-        isError: true,
-        text: err.response?.data?.message || 'Sorry, the agent could not process that request.',
-      }]);
+      setError(err.response?.data?.message || 'The agent could not process this request.');
     } finally {
       setLoading(false);
     }
   };
 
-  const onKeyDown = e => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      send();
-    }
-  };
-
-  const onPickAlternative = alt => {
-    setInput(`Move my class to ${alt.day} at ${alt.time} in ${alt.classroom}`);
-    taRef.current?.focus();
-  };
-
-  const autoGrow = e => {
-    e.target.style.height = 'auto';
-    e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px';
+  const onSubmit = (e) => {
+    e.preventDefault();
+    sendMessage(input);
   };
 
   return (
-    <div className="page-content" style={{ padding: 20, height: '100%', boxSizing: 'border-box' }}>
-      <style>{`
-        @keyframes ta-bounce {
-          0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-          30% { transform: translateY(-4px); opacity: 1; }
-        }
-        .ta-scroll::-webkit-scrollbar { width: 6px; }
-        .ta-scroll::-webkit-scrollbar-thumb { background: #dde3e8; border-radius: 3px; }
-      `}</style>
-
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 110px)', minHeight: 480, overflow: 'hidden' }}>
-
-        {/* Header */}
-        <div style={{
-          padding: '14px 20px', borderBottom: '1px solid #e0e8ed', background: 'white',
-          display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0
-        }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg, ${NAVY}, ${GREEN})`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="10" rx="2" /><circle cx="12" cy="5" r="2" /><line x1="12" y1="7" x2="12" y2="11" />
-            </svg>
+    <div className="page-content" style={{ padding: isMobile ? 12 : 20 }}>
+      <div className="card" style={{ minHeight: 'calc(100vh - 40px)', display: 'flex', flexDirection: 'column' }}>
+        <div className="card-header" style={{ alignItems: 'center' }}>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Bot size={16} /> Teacher AI Agent
+          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#aabbc8', fontSize: 12 }}>
+            <Sparkles size={14} /> Live timetable checks
           </div>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: '#1a2e3a' }}>Teacher AI Agent</div>
-            <div style={{ fontSize: 11, color: '#7a9aaa' }}>
-              {loading ? 'Thinking…' : 'Ask about your timetable, availability, or reschedule requests'}
+        </div>
+
+        <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1, minHeight: 0 }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(5, minmax(0, 1fr))',
+            gap: 8,
+          }}>
+            {quickPrompts.map(prompt => (
+              <button
+                key={prompt}
+                onClick={() => sendMessage(prompt)}
+                disabled={loading}
+                style={{
+                  minHeight: 38,
+                  border: '1px solid #d8e4ea',
+                  background: '#f7fafc',
+                  color: '#2d4a5a',
+                  borderRadius: 7,
+                  padding: '8px 10px',
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontFamily: 'inherit',
+                  textAlign: 'left',
+                }}
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+
+          <div style={{
+            flex: 1,
+            minHeight: 360,
+            overflowY: 'auto',
+            background: '#f6f9fb',
+            border: '1px solid #e1eaef',
+            borderRadius: 10,
+            padding: isMobile ? 10 : 16,
+          }}>
+            {messages.map((message, idx) => <AgentMessage key={idx} message={message} />)}
+            {loading && <TypingBubble />}
+          </div>
+
+          {error && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 12px', color: '#b91c1c', fontSize: 12, fontWeight: 600 }}>
+              {error}
             </div>
-          </div>
-        </div>
+          )}
 
-        {/* Messages */}
-        <div className="ta-scroll" style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', background: '#f8fafc' }}>
-          {messages.map((m, i) => (
-            <Bubble key={i} msg={m} onPickAlternative={onPickAlternative} />
-          ))}
-          {loading && <TypingBubble />}
-          <div ref={bottomRef} />
-        </div>
-
-        {/* Composer */}
-        <div style={{ borderTop: '1px solid #e0e8ed', background: 'white', padding: 14, flexShrink: 0 }}>
-          <div style={{
-            display: 'flex', alignItems: 'flex-end', gap: 10, background: '#f8fafc',
-            border: '1px solid #dde3e8', borderRadius: 14, padding: '8px 8px 8px 14px'
-          }}>
-            <textarea
-              ref={taRef}
-              value={input}
-              onChange={e => { setInput(e.target.value); autoGrow(e); }}
-              onKeyDown={onKeyDown}
-              placeholder="Ask about your timetable, availability, or reschedule request…"
-              rows={1}
-              style={{
-                flex: 1, resize: 'none', border: 'none', outline: 'none', background: 'transparent',
-                fontFamily: 'inherit', fontSize: 13.5, lineHeight: 1.5, color: '#1a2e3a',
-                padding: '6px 0', maxHeight: 140
-              }}
-            />
+          <form onSubmit={onSubmit} style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1, position: 'relative' }}>
+              <ClipboardList size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#7a9aaa' }} />
+              <input
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                placeholder="Example: Check Room A-301 availability on Tuesday slot 3"
+                style={{
+                  width: '100%',
+                  border: '1px solid #cfdde5',
+                  borderRadius: 8,
+                  padding: '11px 12px 11px 36px',
+                  fontSize: 13,
+                  outline: 'none',
+                  color: '#1a2e3a',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
             <button
-              onClick={send}
+              type="submit"
               disabled={loading || !input.trim()}
+              title="Send request"
               style={{
-                background: (loading || !input.trim()) ? '#aabbc8' : NAVY, border: 'none', color: 'white',
-                width: 38, height: 38, borderRadius: '50%', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', cursor: (loading || !input.trim()) ? 'not-allowed' : 'pointer',
-                flexShrink: 0, transition: 'background 0.15s'
+                width: 44,
+                height: 42,
+                border: 'none',
+                borderRadius: 8,
+                background: loading || !input.trim() ? '#9db2bd' : '#2d4a5a',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
               }}
-              aria-label="Send message"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
-              </svg>
+              <Send size={17} />
             </button>
-          </div>
-          <div style={{ fontSize: 10.5, color: '#aabbc8', marginTop: 6, paddingLeft: 4 }}>
-            Press Enter to send · Shift + Enter for a new line
-          </div>
+          </form>
         </div>
       </div>
     </div>
