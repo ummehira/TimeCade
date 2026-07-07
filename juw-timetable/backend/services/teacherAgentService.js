@@ -18,10 +18,13 @@ const LAB_SLOTS = {
 
 const TEACHER_AGENT_SYSTEM_PROMPT = `
 You are a Teacher AI Agent integrated with a University Timetable Management System.
-Understand natural language teacher requests, use latest database records, enforce teacher-only permissions,
-validate teacher, classroom, batch, time slot, working-hour, duplicate, and room-capacity conflicts, and never
-generate or permanently modify the university timetable. Teachers may view their own timetable, check resource
-availability, find conflict-free alternatives, and submit rescheduling requests for their own classes only.
+If the teacher sends a greeting such as hello, hi, salam, or good morning, respond warmly and ask how you can help.
+For timetable requests, understand natural language, use latest database records, enforce teacher-only permissions,
+validate teacher, classroom, batch, time slot, working-hour, duplicate lecture, lab-overlap, and room-capacity conflicts.
+Never fabricate timetable data. Never generate or permanently modify the university timetable. Never approve or reject
+requests. Teachers may view their own timetable, check resource availability, find conflict-free alternatives, and submit
+rescheduling requests for their own classes only. Rescheduling requests must be inserted for Admin/Office approval, not
+applied directly to the timetable. If a requested batch, room, teacher, or course does not exist, say that clearly.
 `;
 
 function slotLabel(slot, isLab = false) {
@@ -30,6 +33,10 @@ function slotLabel(slot, isLab = false) {
 
 function normalizeText(value = '') {
   return String(value).toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function isGreeting(text) {
+  return /^(hi|hello|hey|salam|assalam o alaikum|assalamu alaikum|good morning|good afternoon|good evening)\W*$/i.test(String(text || '').trim());
 }
 
 function formatEntry(row) {
@@ -130,6 +137,22 @@ function requestedRoomName(text) {
   const roomMatch = value.match(/\b(room|lab|laboratory)\s+([a-z0-9\-()]+)/i);
   if (!roomMatch) return null;
   return `${roomMatch[1]} ${roomMatch[2]}`.trim();
+}
+
+function requestedBatchName(text) {
+  const value = String(text || '');
+  const batchMatch = value.match(/\b(BS[A-Z]{2,4}[-\s]?\d+[A-Z]?)\b/i);
+  return batchMatch ? batchMatch[1].replace(/\s+/, '-').toUpperCase() : null;
+}
+
+function requestedCourseName(text) {
+  const value = String(text || '');
+  const courseMatch = value.match(/\b(?:my|the)?\s*([a-z][a-z0-9 &.-]{1,80}?)\s+(?:class|lecture|course)\b/i);
+  if (!courseMatch) return null;
+  return courseMatch[1]
+    .replace(/\b(move|shift|change|reschedule|submit|find|available|classroom|room|to|from|for|my|the)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function getRescheduleParts(text) {
@@ -247,6 +270,11 @@ async function findEntryByCourse(entries, text) {
   return matches.length === 1 ? matches[0] : matches[0] || null;
 }
 
+async function findTargetRoom(text) {
+  const { targetText } = getRescheduleParts(text);
+  return findRoom(targetText || text);
+}
+
 async function getSlotOccupants({ day, slot, isLab = false, teacherId, roomId, batchId, excludeId }) {
   const params = [day];
   let where = 'WHERE t.day = $1';
@@ -319,6 +347,38 @@ async function validateSlot({ entry, day, slot, roomId, excludeId }) {
     conflicts.push({ type: 'capacity', message: conflictMessage('capacity', room) });
   }
   return conflicts;
+}
+
+async function submitTimetableUpdateRequest({ userId, entry, day, slot, room, reason }) {
+  const requestData = {
+    batch_id: entry.batch_id,
+    batch_name: entry.batch_name,
+    subject_id: entry.subject_id,
+    subject_name: entry.subject_name,
+    teacher_id: entry.teacher_id,
+    teacher_name: entry.teacher_name,
+    room_id: room?.id || entry.room_id,
+    room_code: room?.room_id || entry.room_code,
+    day,
+    time_slot: slot,
+    slot_label: slotLabel(slot, entry.is_lab),
+    is_lab: entry.is_lab,
+    timetable_entry_id: entry.id,
+    old_day: entry.day,
+    old_slot_label: slotLabel(entry.time_slot, entry.is_lab),
+    old_batch_name: entry.batch_name,
+    old_subject_name: entry.subject_name,
+    old_teacher_name: entry.teacher_name,
+    old_room_code: entry.room_code,
+    teacher_reason: reason,
+    submitted_by_agent: true,
+  };
+  const inserted = await pool.query(
+    `INSERT INTO admin_requests (requested_by, request_type, entity_type, entity_id, request_data)
+     VALUES ($1, 'update', 'timetable', $2, $3) RETURNING id, status`,
+    [userId, entry.id, JSON.stringify(requestData)]
+  );
+  return { requestData, request: inserted.rows[0] };
 }
 
 async function findAlternatives(entry, limit = 5) {
@@ -431,6 +491,13 @@ async function handleTeacherAgentMessage({ user, message }) {
   const text = String(message || '').trim();
   if (!text) return response({ intent: 'missing_message', summary: 'Please enter a timetable-related request.', missing: ['message'] });
 
+  if (isGreeting(text)) {
+    return response({
+      intent: 'greeting',
+      summary: 'Hello! I can help you check your timetable, room or batch availability, free periods, workload, conflict-free alternatives, and rescheduling requests. How can I help you today?',
+    });
+  }
+
   const teacher = await getLoggedInTeacher(user.id);
   if (!teacher) return response({ intent: 'teacher_not_found', summary: 'Your teacher profile could not be found.' });
 
@@ -498,11 +565,14 @@ async function handleTeacherAgentMessage({ user, message }) {
   if (/\b(which|what)\b/.test(lower) && /\b(classroom|room)\b/.test(lower) && /\b(assigned|for my|to my)\b/.test(lower)) {
     const entry = await findEntryByCourse(entries, text);
     if (!entry) {
+      const requestedCourse = requestedCourseName(text);
       return response({
         intent: 'assigned_classroom_for_course',
-        summary: 'Please mention the exact course name so I can find its assigned classroom.',
+        summary: requestedCourse
+          ? `${requestedCourse} was not found in your assigned timetable. Please check the exact course name.`
+          : 'Please mention the exact course name so I can find its assigned classroom.',
         missing: ['course'],
-        rows: entries.map(formatEntry),
+        rows: [],
       });
     }
     return response({
@@ -601,11 +671,28 @@ async function handleTeacherAgentMessage({ user, message }) {
     const { sourceText, targetText } = getRescheduleParts(text);
     const newDay = getDayFromText(targetText);
     const newSlot = getSlotFromText(targetText);
-    const entry = inferEntry(entries, sourceText);
+    const entry = inferEntry(entries, sourceText) || await findEntryByCourse(entries, sourceText);
+    const targetRoom = await findTargetRoom(text);
+    const requestedRoom = requestedRoomName(targetText || text);
+    const requestedCourse = requestedCourseName(sourceText);
     const missing = [];
+    if (!entry && requestedCourse) {
+      return response({
+        intent: 'reschedule_request',
+        summary: `${requestedCourse} was not found in your assigned timetable. Please check the exact course name before submitting a rescheduling request.`,
+        conflicts: [{ type: 'course_not_found', message: `${requestedCourse} is not assigned to your timetable records.` }],
+      });
+    }
     if (!entry) missing.push('exact class (course/batch/day/time)');
-    if (!newDay) missing.push('new day');
-    if (!newSlot) missing.push('new time slot');
+    if (requestedRoom && !targetRoom) {
+      return response({
+        intent: 'reschedule_request',
+        summary: `${requestedRoom} was not found in the university room database. Please check the room code and try again.`,
+        conflicts: [{ type: 'room_not_found', message: `${requestedRoom} does not exist in the rooms table.` }],
+      });
+    }
+    if (!newDay && !targetRoom) missing.push('new day');
+    if (!newSlot && !targetRoom) missing.push('new time slot');
     if (missing.length) {
       return response({
         intent: 'reschedule_request',
@@ -617,7 +704,10 @@ async function handleTeacherAgentMessage({ user, message }) {
         alternatives: entry ? await findAlternatives(entry, 5) : [],
       });
     }
-    const conflicts = await validateSlot({ entry, day: newDay, slot: newSlot, excludeId: entry.id });
+
+    const finalDay = newDay || entry.day;
+    const finalSlot = newSlot || entry.time_slot;
+    const conflicts = await validateSlot({ entry, day: finalDay, slot: finalSlot, roomId: targetRoom?.id, excludeId: entry.id });
     const alternatives = conflicts.length ? await findAlternatives(entry) : [];
     if (conflicts.length) {
       return response({
@@ -628,39 +718,25 @@ async function handleTeacherAgentMessage({ user, message }) {
         alternatives,
       });
     }
-    const requestData = {
-      batch_id: entry.batch_id,
-      batch_name: entry.batch_name,
-      subject_id: entry.subject_id,
-      subject_name: entry.subject_name,
-      teacher_id: entry.teacher_id,
-      teacher_name: entry.teacher_name,
-      room_id: entry.room_id,
-      room_code: entry.room_code,
-      day: newDay,
-      time_slot: newSlot,
-      slot_label: slotLabel(newSlot, entry.is_lab),
-      is_lab: entry.is_lab,
-      timetable_entry_id: entry.id,
-      old_day: entry.day,
-      old_slot_label: slotLabel(entry.time_slot, entry.is_lab),
-      old_batch_name: entry.batch_name,
-      old_subject_name: entry.subject_name,
-      old_teacher_name: entry.teacher_name,
-      old_room_code: entry.room_code,
-      teacher_reason: text,
-      submitted_by_agent: true,
-    };
-    const inserted = await pool.query(
-      `INSERT INTO admin_requests (requested_by, request_type, entity_type, entity_id, request_data)
-       VALUES ($1, 'update', 'timetable', $2, $3) RETURNING id, status`,
-      [user.id, entry.id, JSON.stringify(requestData)]
-    );
+    const { request } = await submitTimetableUpdateRequest({
+      userId: user.id,
+      entry,
+      day: finalDay,
+      slot: finalSlot,
+      room: targetRoom,
+      reason: text,
+    });
     return response({
       intent: 'reschedule_request',
-      summary: 'Reschedule request submitted. Awaiting Office Assistant approval.',
-      rows: [{ ...formatEntry(entry), availabilityStatus: 'Requested', day: newDay, time: slotLabel(newSlot, entry.is_lab) }],
-      request: inserted.rows[0],
+      summary: 'Request verified and submitted for Admin approval. The timetable has not been changed directly.',
+      rows: [{
+        ...formatEntry(entry),
+        classroom: targetRoom?.room_id || entry.room_code,
+        availabilityStatus: 'Requested',
+        day: finalDay,
+        time: slotLabel(finalSlot, entry.is_lab),
+      }],
+      request,
     });
   }
 
@@ -701,6 +777,14 @@ async function handleTeacherAgentMessage({ user, message }) {
 
     if (/\bavailable slots|free slots|find slots|time slots\b/.test(lower)) {
       const batch = await findBatch(text);
+      const requestedBatch = requestedBatchName(text);
+      if (requestedBatch && !batch) {
+        return response({
+          intent: 'available_time_slots',
+          summary: `${requestedBatch} was not found in the batch database. Please check the batch name and try again.`,
+          conflicts: [{ type: 'batch_not_found', message: `${requestedBatch} does not exist in the batches table.` }],
+        });
+      }
       if (batch) {
         const rows = [];
         for (const d of DAYS) {
