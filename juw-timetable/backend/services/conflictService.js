@@ -78,6 +78,7 @@ async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day,
     return conflicts;
   }
 
+  
   // ── NORMAL MODE — strict checks ──────────────────────────────────────────
 
   // 1. Teacher conflict
