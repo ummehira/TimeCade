@@ -7,6 +7,8 @@ require('dotenv').config();
 
 const app = express();
 
+const lookupTableService = require('./services/lookupTableService');
+
 // ── Middleware ──────────────────────────────
 app.use(cors({
   origin: [
@@ -18,7 +20,7 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
- 
+
 
 // ── Routes ──────────────────────────────────
 app.use('/api/auth',        require('./routes/authRoutes'));
@@ -47,8 +49,22 @@ app.use((err, req, res, next) => {
 });
 
 // ── Start Server ────────────────────────────
+// Wait for the lookup table to load before accepting traffic, so the
+// assistant agent never hits a request while lookupTableService is
+// still uninitialized (which would throw on the first message).
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`\n✅ JUW Timetable Backend running on http://localhost:${PORT}`);
-  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}\n`);
+
+async function startServer() {
+  await lookupTableService.init();
+  console.log('Lookup table ready');
+
+  app.listen(PORT, () => {
+    console.log(`\n✅ JUW Timetable Backend running on http://localhost:${PORT}`);
+    console.log(`   Environment: ${process.env.NODE_ENV || 'development'}\n`);
+  });
+}
+
+startServer().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });

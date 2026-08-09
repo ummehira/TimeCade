@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const lookupTableService = require('./lookupTableService');
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const SLOTS = [
@@ -173,42 +174,39 @@ async function getAllEntries(filters = {}) {
   )).rows;
 }
 
+// These four now delegate to the cached, fuzzy-matching lookup table instead
+// of re-querying the DB and doing plain substring checks on every call. The
+// signature and return shape (a raw DB row, or null) are unchanged, so every
+// caller below keeps working as-is. When a match is ambiguous or not found,
+// `lastMatchInfo` on each function holds the detail (candidates, etc.) in
+// case a caller wants to surface a clarifying question instead of just null.
+findRoom.lastMatchInfo = null;
+findBatch.lastMatchInfo = null;
+findTeacher.lastMatchInfo = null;
+findSubject.lastMatchInfo = null;
+
 async function findRoom(text) {
-  const rooms = (await pool.query('SELECT id, room_id, room_name, capacity, room_type, is_available FROM rooms ORDER BY room_id')).rows;
-  const lower = normalizeText(text);
-  return rooms.find(r =>
-    lower.includes(normalizeText(r.room_id)) ||
-    (r.room_name && lower.includes(normalizeText(r.room_name)))
-  ) || null;
+  const result = lookupTableService.matchRoom(text);
+  findRoom.lastMatchInfo = result;
+  return result.matched ? result.row : null;
 }
 
 async function findBatch(text) {
-  const batches = (await pool.query('SELECT id, batch_name, student_count FROM batches ORDER BY batch_name')).rows;
-  const lower = normalizeText(text);
-  return batches.find(b => lower.includes(normalizeText(b.batch_name))) || null;
+  const result = lookupTableService.matchBatch(text);
+  findBatch.lastMatchInfo = result;
+  return result.matched ? result.row : null;
 }
 
 async function findTeacher(text) {
-  const teachers = (await pool.query('SELECT id, teacher_id, full_name FROM teachers ORDER BY full_name')).rows;
-  const lower = normalizeText(text);
-  const words = new Set(lower.split(' ').filter(w => w.length >= 3));
-
-  // Prefer an exact full-name or teacher-id match first.
-  const exact = teachers.find(t => lower.includes(normalizeText(t.teacher_id)) || lower.includes(normalizeText(t.full_name)));
-  if (exact) return exact;
-
-  // Fall back to matching on any individual name token (e.g. "miss tehreem" -> "Tehreem Zafar"),
-  // but only when exactly one teacher matches, to avoid guessing between two similarly-named staff.
-  const candidates = teachers.filter(t =>
-    normalizeText(t.full_name).split(' ').some(part => part.length >= 3 && words.has(part))
-  );
-  return candidates.length === 1 ? candidates[0] : null;
+  const result = lookupTableService.matchTeacher(text);
+  findTeacher.lastMatchInfo = result;
+  return result.matched ? result.row : null;
 }
 
 async function findSubject(text) {
-  const subjects = (await pool.query('SELECT id, name, short_name, code FROM subjects ORDER BY name')).rows;
-  const lower = normalizeText(text);
-  return subjects.find(s => [s.name, s.short_name, s.code].filter(Boolean).some(v => lower.includes(normalizeText(v)))) || null;
+  const result = lookupTableService.matchSubject(text);
+  findSubject.lastMatchInfo = result;
+  return result.matched ? result.row : null;
 }
 
 async function getSlotOccupants({ day, slot, isLab = false, teacherId, roomId, batchId, excludeId }) {
@@ -653,12 +651,30 @@ async function handleAssistantAgentMessage({ user, message }) {
   }
 
   if (/\b(available|availability|free)\b/.test(lower)) {
-    if (!day || !slot) {
-      return response({ intent: 'availability_check', summary: 'Please provide both day and time slot so I can check live availability.', missing: ['day', 'time slot'] });
-    }
     const room = await findRoom(text);
     const batch = await findBatch(text);
     const teacher = await findTeacher(text);
+
+    // "When is X free on Monday" gives a day but no specific time — that's a
+    // request for every free period that day, not a single-slot check, so
+    // handle it before demanding an exact time slot.
+    if (day && !slot && (teacher || batch || room)) {
+      const target = teacher
+        ? { idFilter: { teacherId: teacher.id }, label: teacher.full_name }
+        : batch
+        ? { idFilter: { batchId: batch.id }, label: batch.batch_name }
+        : { idFilter: { roomId: room.id }, label: room.room_id };
+      const rows = await getFreePeriods({ day, ...target.idFilter });
+      return response({
+        intent: 'free_periods',
+        summary: rows.length ? `Here are the free periods for ${target.label} on ${day}.` : `No free periods were found for ${target.label} on ${day}.`,
+        rows,
+      });
+    }
+
+    if (!day || !slot) {
+      return response({ intent: 'availability_check', summary: 'Please provide both day and time slot so I can check live availability.', missing: ['day', 'time slot'] });
+    }
     const rows = [];
     const conflicts = [];
 
@@ -694,6 +710,37 @@ async function handleAssistantAgentMessage({ user, message }) {
 
   // ---- View schedules ----
   if (/\btoday|tomorrow|weekly|week\b/.test(lower) || day) {
+    // A day/week phrase can still be paired with a specific room, batch, or
+    // teacher (e.g. "classes in C-62 on Monday") — check those first so the
+    // day filter doesn't silently swallow the more specific request.
+    const roomForDay = await findRoom(text);
+    if (roomForDay) {
+      const entries = await getAllEntries({ day: day || undefined, roomId: roomForDay.id });
+      return response({
+        intent: 'view_room_schedule',
+        summary: entries.length ? `Here is the schedule for ${roomForDay.room_id}${day ? ` on ${day}` : ''}.` : `No scheduled entries were found for ${roomForDay.room_id}${day ? ` on ${day}` : ''}.`,
+        rows: entries.map(formatEntry),
+      });
+    }
+    const batchForDay = await findBatch(text);
+    if (batchForDay) {
+      const entries = await getAllEntries({ day: day || undefined, batchId: batchForDay.id });
+      return response({
+        intent: 'view_batch_schedule',
+        summary: entries.length ? `Here is the schedule for ${batchForDay.batch_name}${day ? ` on ${day}` : ''}.` : `No scheduled entries were found for ${batchForDay.batch_name}${day ? ` on ${day}` : ''}.`,
+        rows: entries.map(formatEntry),
+      });
+    }
+    const teacherForDay = await findTeacher(text);
+    if (teacherForDay) {
+      const entries = await getAllEntries({ day: day || undefined, teacherId: teacherForDay.id });
+      return response({
+        intent: 'view_teacher_schedule',
+        summary: entries.length ? `Here is the schedule for ${teacherForDay.full_name}${day ? ` on ${day}` : ''}.` : `No scheduled entries were found for ${teacherForDay.full_name}${day ? ` on ${day}` : ''}.`,
+        rows: entries.map(formatEntry),
+      });
+    }
+
     const entries = await getAllEntries({ day: day || undefined });
     return response({
       intent: day ? 'view_day' : 'view_weekly',
@@ -712,6 +759,12 @@ async function handleAssistantAgentMessage({ user, message }) {
   if (batchLookup && /\bschedule|timetable|classes\b/.test(lower)) {
     const entries = await getAllEntries({ batchId: batchLookup.id });
     return response({ intent: 'view_batch_schedule', summary: `Here is the schedule for ${batchLookup.batch_name}.`, rows: entries.map(formatEntry) });
+  }
+
+  const roomLookup = await findRoom(text);
+  if (roomLookup && /\bschedule|timetable|classes\b/.test(lower)) {
+    const entries = await getAllEntries({ roomId: roomLookup.id });
+    return response({ intent: 'view_room_schedule', summary: `Here is the schedule for ${roomLookup.room_id}.`, rows: entries.map(formatEntry) });
   }
 
   return response({
