@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const lookupTableService = require('./lookupTableService');
+const { askAssistantAgentQwen } = require('./assistantAgentQwenService');
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const SLOTS = [
@@ -85,37 +86,6 @@ function getSlotFromText(text) {
   return timeMap.find(t => t.re.test(lower))?.slot || null;
 }
 
-function isLabText(text) {
-  return /\blab\b|laboratory|3\s*hour|three\s*hour/i.test(text);
-}
-
-function requestedRoomName(text) {
-  const value = String(text || '');
-  const roomMatch = value.match(/\b(room|lab|laboratory)\s+([a-z0-9\-()]+)/i);
-  if (!roomMatch) return null;
-  return `${roomMatch[1]} ${roomMatch[2]}`.trim();
-}
-
-function requestedBatchName(text) {
-  const value = String(text || '');
-  const batchMatch = value.match(/\b(BS[A-Z]{2,4}[-\s]?\d+[A-Z]?)\b/i);
-  return batchMatch ? batchMatch[1].replace(/\s+/, '-').toUpperCase() : null;
-}
-
-function requestedTeacherName(text) {
-  const match = String(text || '').match(/\b(?:teacher|instructor|sir|ma'?am|prof\.?|professor)\s+([a-z][a-z .]{1,60})/i);
-  return match ? match[1].trim() : null;
-}
-
-function getRescheduleParts(text) {
-  const match = String(text).match(/\b(?:to|into)\b/i);
-  if (!match) return { sourceText: text, targetText: text };
-  return {
-    sourceText: text.slice(0, match.index),
-    targetText: text.slice(match.index + match[0].length),
-  };
-}
-
 function slotWindow(slot, isLab = false) {
   const start = Number(slot);
   return { start, end: start + (isLab ? 2 : 0) };
@@ -185,27 +155,40 @@ findBatch.lastMatchInfo = null;
 findTeacher.lastMatchInfo = null;
 findSubject.lastMatchInfo = null;
 
+function logMatch(kind, text, result) {
+  if (!process.env.DEBUG_ASSISTANT_AGENT) return;
+  console.log(`[assistant-agent] ${kind} lookup for "${text}":`, result.matched
+    ? `matched -> ${result.canonical} (id ${result.id})`
+    : result.ambiguous
+    ? `ambiguous -> candidates: ${JSON.stringify(result.candidates)}`
+    : 'no match');
+}
+
 async function findRoom(text) {
   const result = lookupTableService.matchRoom(text);
   findRoom.lastMatchInfo = result;
+  logMatch('room', text, result);
   return result.matched ? result.row : null;
 }
 
 async function findBatch(text) {
   const result = lookupTableService.matchBatch(text);
   findBatch.lastMatchInfo = result;
+  logMatch('batch', text, result);
   return result.matched ? result.row : null;
 }
 
 async function findTeacher(text) {
   const result = lookupTableService.matchTeacher(text);
   findTeacher.lastMatchInfo = result;
+  logMatch('teacher', text, result);
   return result.matched ? result.row : null;
 }
 
 async function findSubject(text) {
   const result = lookupTableService.matchSubject(text);
   findSubject.lastMatchInfo = result;
+  logMatch('subject', text, result);
   return result.matched ? result.row : null;
 }
 
@@ -434,7 +417,7 @@ function inferEntry(entries, text) {
   const lower = normalizeText(text);
   let matches = entries;
   if (day) matches = matches.filter(e => e.day === day);
-  if (slot) matches = matches.filter(e => overlaps(slot, isLabText(text), e.time_slot, e.is_lab));
+  if (slot) matches = matches.filter(e => overlaps(slot, false, e.time_slot, e.is_lab));
   const courseMatches = matches.filter(e => lower.includes(normalizeText(e.subject_name)) || lower.includes(normalizeText(e.short_name || '')));
   if (courseMatches.length) matches = courseMatches;
   const batchMatches = matches.filter(e => lower.includes(normalizeText(e.batch_name)));
@@ -442,6 +425,37 @@ function inferEntry(entries, text) {
   const teacherMatches = matches.filter(e => e.teacher_name && lower.includes(normalizeText(e.teacher_name)));
   if (teacherMatches.length) matches = teacherMatches;
   return matches.length === 1 ? matches[0] : (matches.length ? matches[0] : null);
+}
+
+async function resolveEntry({ course, batch, teacher, room, day, slot, isLab, rawText }) {
+  const filters = {};
+  if (day) filters.day = day;
+  const batchRow = batch ? await findBatch(batch) : null;
+  const teacherRow = teacher ? await findTeacher(teacher) : null;
+  const roomRow = room ? await findRoom(room) : null;
+  if (batchRow) filters.batchId = batchRow.id;
+  if (teacherRow) filters.teacherId = teacherRow.id;
+  if (roomRow) filters.roomId = roomRow.id;
+
+  let entries = await getAllEntries(filters);
+  if (slot) entries = entries.filter(e => overlaps(slot, isLab, e.time_slot, e.is_lab));
+  if (course) {
+    const subjectRow = await findSubject(course);
+    if (subjectRow) entries = entries.filter(e => e.subject_id === subjectRow.id);
+  }
+  if (entries.length === 1) return entries[0];
+  // Still ambiguous (or nothing narrowed at all) — fall back to scanning the
+  // raw message against whatever candidates we have, same heuristic the old
+  // router used for free-text disambiguation.
+  return inferEntry(entries.length ? entries : await getAllEntries({}), rawText);
+}
+
+function notFound(kind, label) {
+  return response({
+    intent: `${kind}_not_found`,
+    summary: `${label} was not found in the ${kind} database.`,
+    conflicts: [{ type: `${kind}_not_found`, message: `${label} does not exist.` }],
+  });
 }
 
 function response({ intent, summary, rows = [], conflicts = [], alternatives = [], missing = [], request = null, report = null }) {
@@ -456,214 +470,226 @@ async function handleAssistantAgentMessage({ user, message }) {
     return response({ intent: 'greeting', summary: 'Hello! I can schedule, reschedule, or cancel classes, assign teachers, check availability and conflicts, review pending requests, or run workload/utilization reports. How can I help?' });
   }
 
-  const lower = normalizeText(text);
-  const day = getDayFromText(text);
-  const slot = getSlotFromText(text);
-
-  // ---- View intent guard ----
-  // Question-style phrasing ("what is the schedule of...", "show me...", "which classes...")
-  // must always resolve to a lookup, never to a create/modify action, even when it contains
-  // words like "schedule" that also appear in action triggers further down.
-  const isQuestionPhrasing = /^(what|who|which|show|tell|give|find|list|display|is|does|do)\b/.test(lower)
-    || /\b(schedule|timetable|classes)\s+(of|for)\b/.test(lower);
-
-  if (isQuestionPhrasing && /\bschedule|timetable|classes\b/.test(lower)) {
-    const teacherForView = await findTeacher(text);
-    if (teacherForView) {
-      const entries = await getAllEntries({ teacherId: teacherForView.id });
-      return response({ intent: 'view_teacher_schedule', summary: `Here is the schedule for ${teacherForView.full_name}.`, rows: entries.map(formatEntry) });
-    }
-    const batchForView = await findBatch(text);
-    if (batchForView) {
-      const entries = await getAllEntries({ batchId: batchForView.id });
-      return response({ intent: 'view_batch_schedule', summary: `Here is the schedule for ${batchForView.batch_name}.`, rows: entries.map(formatEntry) });
-    }
-    const roomForView = await findRoom(text);
-    if (roomForView) {
-      const entries = await getAllEntries({ roomId: roomForView.id });
-      return response({ intent: 'view_room_schedule', summary: `Here is the schedule for ${roomForView.room_id}.`, rows: entries.map(formatEntry) });
-    }
+  let parsed;
+  try {
+    parsed = await askAssistantAgentQwen(text);
+  } catch (err) {
+    console.error('Assistant Agent NLU error:', err);
+    return response({ intent: 'nlu_error', summary: 'The AI classification service is temporarily unavailable. Please try again in a moment.' });
   }
 
-  // ---- Pending requests: view / approve / reject ----
-  if (/\bpending\b.*\brequest|requests?\b.*\bpending\b/.test(lower)) {
-    const rows = await getPendingRequests();
-    return response({
-      intent: 'view_pending_requests',
-      summary: rows.length ? `There are ${rows.length} pending request(s) awaiting review.` : 'No pending requests were found.',
-      rows: rows.map(r => ({ id: r.id, type: r.request_type, entity: r.entity_type, requestedBy: r.requested_by_email, data: r.request_data, createdAt: r.created_at })),
-    });
+  const day = parsed.day ? getDayFromText(parsed.day) : null;
+  const targetDay = parsed.target_day ? getDayFromText(parsed.target_day) : null;
+  const slot = parsed.time_slot || (parsed.time_text ? getSlotFromText(parsed.time_text) : null);
+  const targetSlot = parsed.target_time_slot || null;
+  const isLab = !!parsed.is_lab;
+
+  if (process.env.DEBUG_ASSISTANT_AGENT) {
+    console.log('[assistant-agent] message:', text);
+    console.log('[assistant-agent] parsed from LLM:', JSON.stringify(parsed));
+    console.log('[assistant-agent] resolved day/slot:', { day, targetDay, slot, targetSlot, isLab });
   }
 
-  if (/\bapprove\b/.test(lower)) {
-    const idMatch = lower.match(/\b(?:request\s*#?)(\d+)\b/);
-    if (!idMatch) {
-      return response({ intent: 'approve_request', summary: 'Please specify the request ID to approve, e.g. "approve request 12".', missing: ['request_id'] });
-    }
-    const result = await approveRequest({ requestId: Number(idMatch[1]), reviewerId: user.id, note: null });
-    if (result.error) return response({ intent: 'approve_request', summary: result.error, conflicts: result.conflicts || [] });
-    return response({ intent: 'approve_request', summary: `Request #${idMatch[1]} was approved and applied to the timetable.` });
-  }
+  switch (parsed.intent) {
+    case 'greeting':
+      return response({ intent: 'greeting', summary: 'Hello! How can I help with the timetable today?' });
 
-  if (/\breject\b|\bdecline\b/.test(lower)) {
-    const idMatch = lower.match(/\b(?:request\s*#?)(\d+)\b/);
-    if (!idMatch) {
-      return response({ intent: 'reject_request', summary: 'Please specify the request ID to reject, e.g. "reject request 12".', missing: ['request_id'] });
+    case 'view_teacher_schedule': {
+      const teacher = await findTeacher(parsed.teacher || text);
+      if (!teacher) return notFound('teacher', parsed.teacher || 'The requested teacher');
+      const entries = await getAllEntries({ teacherId: teacher.id, day: day || undefined });
+      return response({
+        intent: 'view_teacher_schedule',
+        summary: entries.length ? `Here is the schedule for ${teacher.full_name}${day ? ` on ${day}` : ''}.` : `No scheduled classes were found for ${teacher.full_name}${day ? ` on ${day}` : ''}.`,
+        rows: entries.map(formatEntry),
+      });
     }
-    const result = await rejectRequest({ requestId: Number(idMatch[1]), reviewerId: user.id, note: null });
-    if (result.error) return response({ intent: 'reject_request', summary: result.error });
-    return response({ intent: 'reject_request', summary: `Request #${idMatch[1]} was rejected.` });
-  }
 
-  // ---- Reports ----
-  if (/\bworkload\b/.test(lower) && /\ball\b|\bteachers\b|\bfaculty\b/.test(lower)) {
-    const report = await teacherWorkloadReport();
-    return response({ intent: 'teacher_workload_report', summary: 'Here is the teaching workload across all teachers.', report });
-  }
+    case 'view_batch_schedule': {
+      const batch = await findBatch(parsed.batch || text);
+      if (!batch) return notFound('batch', parsed.batch || 'The requested batch');
+      const entries = await getAllEntries({ batchId: batch.id, day: day || undefined });
+      return response({
+        intent: 'view_batch_schedule',
+        summary: entries.length ? `Here is the schedule for ${batch.batch_name}${day ? ` on ${day}` : ''}.` : `No scheduled classes were found for ${batch.batch_name}${day ? ` on ${day}` : ''}.`,
+        rows: entries.map(formatEntry),
+      });
+    }
 
-  if (/\butiliz|\broom usage|\bhow (busy|full) (is|are) (the )?rooms?\b/.test(lower)) {
-    const report = await roomUtilizationReport();
-    return response({ intent: 'room_utilization_report', summary: 'Here is room utilization across the week.', report });
-  }
+    case 'view_room_schedule': {
+      const room = await findRoom(parsed.room || text);
+      if (!room) return notFound('room', parsed.room || 'The requested room');
+      const entries = await getAllEntries({ roomId: room.id, day: day || undefined });
+      return response({
+        intent: 'view_room_schedule',
+        summary: entries.length ? `Here is the schedule for ${room.room_id}${day ? ` on ${day}` : ''}.` : `No scheduled classes were found for ${room.room_id}${day ? ` on ${day}` : ''}.`,
+        rows: entries.map(formatEntry),
+      });
+    }
 
-  // ---- Cancel a class ----
-  if (!isQuestionPhrasing && /\bcancel\b|\bremove\b|\bdelete\b/.test(lower) && /\bclass|lecture|session\b/.test(lower)) {
-    const entries = await getAllEntries({ day });
-    const entry = inferEntry(entries, text);
-    if (!entry) {
-      return response({ intent: 'cancel_class', summary: 'I could not identify a unique class to cancel. Please include the course, batch, day, and time.', missing: ['course/batch', 'day', 'time'] });
+    case 'view_day':
+    case 'view_weekly': {
+      const entries = await getAllEntries({ day: day || undefined });
+      return response({
+        intent: day ? 'view_day' : 'view_weekly',
+        summary: entries.length ? `Here is the timetable${day ? ` for ${day}` : ' for the week'}.` : 'No scheduled entries were found.',
+        rows: entries.map(formatEntry),
+      });
     }
-    await cancelClass(entry);
-    return response({ intent: 'cancel_class', summary: `Cancelled ${entry.subject_name} for ${entry.batch_name} on ${entry.day} at ${entry.slot_label}.`, rows: [formatEntry(entry)] });
-  }
 
-  // ---- Assign / reassign a teacher ----
-  if (!isQuestionPhrasing && (/\bassign\b.*\bteacher\b/.test(lower) || /\breassign\b/.test(lower))) {
-    const entries = await getAllEntries({ day });
-    const entry = inferEntry(entries, text);
-    const teacherName = requestedTeacherName(text);
-    const teacher = await findTeacher(text);
-    if (!entry) {
-      return response({ intent: 'assign_teacher', summary: 'Please specify which class (course, batch, day, time) needs a teacher assigned.', missing: ['course/batch', 'day', 'time'] });
+    case 'view_pending_requests': {
+      const rows = await getPendingRequests();
+      return response({
+        intent: 'view_pending_requests',
+        summary: rows.length ? `There are ${rows.length} pending request(s) awaiting review.` : 'No pending requests were found.',
+        rows: rows.map(r => ({ id: r.id, type: r.request_type, entity: r.entity_type, requestedBy: r.requested_by_email, data: r.request_data, createdAt: r.created_at })),
+      });
     }
-    if (teacherName && !teacher) {
-      return response({ intent: 'assign_teacher', summary: `${teacherName} was not found in the teacher database.`, conflicts: [{ type: 'teacher_not_found', message: `${teacherName} does not exist in the teachers table.` }] });
-    }
-    if (!teacher) {
-      return response({ intent: 'assign_teacher', summary: 'Please specify which teacher to assign, e.g. "assign teacher Ali Raza to the DLD class".', missing: ['teacher'] });
-    }
-    const result = await assignTeacher({ entry, teacher });
-    if (result.conflicts.length) {
-      return response({ intent: 'assign_teacher', summary: `Cannot assign ${teacher.full_name}: conflicts were found.`, conflicts: result.conflicts });
-    }
-    return response({ intent: 'assign_teacher', summary: `${teacher.full_name} was assigned to ${entry.subject_name} (${entry.batch_name}) on ${entry.day} at ${entry.slot_label}.`, rows: [formatEntry(result.entry)] });
-  }
 
-  // ---- Schedule a brand-new class ----
-  const looksLikeCreateCommand = /\b(schedule|add|create|book)\b.{0,25}\b(class|lecture|session)\b/.test(lower)
-    || /\b(class|lecture|session)\b.{0,25}\b(schedule|add|create|book)\b/.test(lower);
-  if (looksLikeCreateCommand && !isQuestionPhrasing) {
-    const batch = await findBatch(text);
-    const subject = await findSubject(text);
-    const teacher = await findTeacher(text);
-    const room = await findRoom(text);
-    const missing = [];
-    if (!batch) missing.push('batch');
-    if (!subject) missing.push('course/subject');
-    if (!day) missing.push('day');
-    if (!slot) missing.push('time slot');
-    if (missing.length) {
-      return response({ intent: 'schedule_class', summary: `Please provide the missing details to schedule this class: ${missing.join(', ')}.`, missing });
+    case 'approve_request': {
+      const requestId = parsed.request_id || Number((text.match(/\b(?:request\s*#?)(\d+)\b/i) || [])[1]);
+      if (!requestId) return response({ intent: 'approve_request', summary: 'Please specify the request ID to approve, e.g. "approve request 12".', missing: ['request_id'] });
+      const result = await approveRequest({ requestId: Number(requestId), reviewerId: user.id, note: null });
+      if (result.error) return response({ intent: 'approve_request', summary: result.error, conflicts: result.conflicts || [] });
+      return response({ intent: 'approve_request', summary: `Request #${requestId} was approved and applied to the timetable.` });
     }
-    const result = await scheduleClass({
-      userId: user.id, batch, subject, teacher, room, day, slot, isLab: isLabText(text),
-    });
-    if (result.conflicts.length) {
-      return response({ intent: 'schedule_class', summary: 'This class could not be scheduled because of conflicts.', conflicts: result.conflicts });
-    }
-    return response({ intent: 'schedule_class', summary: `Scheduled ${subject.name} for ${batch.batch_name} on ${day} at ${slotLabel(slot, isLabText(text))}.`, rows: [formatEntry(result.entry)] });
-  }
 
-  // ---- Reschedule an existing class (direct, no approval needed) ----
-  if (!isQuestionPhrasing && /\breschedule\b|\bmove\b|\bshift\b|\bchange\b.*\b(time|day|room)\b/.test(lower) && /\bclass|lecture|session\b/.test(lower)) {
-    const { sourceText, targetText } = getRescheduleParts(text);
-    const entries = await getAllEntries({});
-    const entry = inferEntry(entries, sourceText) || inferEntry(entries, text);
-    if (!entry) {
-      return response({ intent: 'reschedule_class', summary: 'I could not identify a unique class to reschedule. Please include the course, batch, current day, and time.', missing: ['course/batch', 'current day', 'current time'] });
+    case 'reject_request': {
+      const requestId = parsed.request_id || Number((text.match(/\b(?:request\s*#?)(\d+)\b/i) || [])[1]);
+      if (!requestId) return response({ intent: 'reject_request', summary: 'Please specify the request ID to reject, e.g. "reject request 12".', missing: ['request_id'] });
+      const result = await rejectRequest({ requestId: Number(requestId), reviewerId: user.id, note: null });
+      if (result.error) return response({ intent: 'reject_request', summary: result.error });
+      return response({ intent: 'reject_request', summary: `Request #${requestId} was rejected.` });
     }
-    const targetDay = getDayFromText(targetText) || day;
-    const targetSlot = getSlotFromText(targetText) || slot;
-    const targetRoom = await findRoom(targetText);
-    if (!targetDay || !targetSlot) {
-      return response({ intent: 'reschedule_class', summary: 'Please specify the new day and time slot for this class.', missing: ['target day', 'target time'] });
-    }
-    const result = await rescheduleClass({ entry, day: targetDay, slot: targetSlot, room: targetRoom });
-    if (result.conflicts.length) {
-      return response({ intent: 'reschedule_class', summary: 'This class could not be rescheduled because of conflicts.', conflicts: result.conflicts });
-    }
-    return response({
-      intent: 'reschedule_class',
-      summary: `Moved ${entry.subject_name} (${entry.batch_name}) from ${entry.day} ${entry.slot_label} to ${targetDay} ${slotLabel(targetSlot, entry.is_lab)}.`,
-      rows: [formatEntry(result.entry)],
-    });
-  }
 
-  // ---- Availability / conflict checks and finders ----
-  if (/\bavailable slots|free slots|find slots|time slots\b/.test(lower)) {
-    const batch = await findBatch(text);
-    const teacher = await findTeacher(text);
-    if (batch) {
+    case 'teacher_workload_report': {
+      const report = await teacherWorkloadReport();
+      return response({ intent: 'teacher_workload_report', summary: 'Here is the teaching workload across all teachers.', report });
+    }
+
+    case 'room_utilization_report': {
+      const report = await roomUtilizationReport();
+      return response({ intent: 'room_utilization_report', summary: 'Here is room utilization across the week.', report });
+    }
+
+    case 'cancel_class': {
+      const entry = await resolveEntry({ course: parsed.course, batch: parsed.batch, teacher: parsed.teacher, room: parsed.room, day, slot, isLab, rawText: text });
+      if (!entry) {
+        return response({ intent: 'cancel_class', summary: 'I could not identify a unique class to cancel. Please include the course, batch, day, and time.', missing: ['course/batch', 'day', 'time'] });
+      }
+      await cancelClass(entry);
+      return response({ intent: 'cancel_class', summary: `Cancelled ${entry.subject_name} for ${entry.batch_name} on ${entry.day} at ${entry.slot_label}.`, rows: [formatEntry(entry)] });
+    }
+
+    case 'assign_teacher': {
+      const entry = await resolveEntry({ course: parsed.course, batch: parsed.batch, room: parsed.room, day, slot, isLab, rawText: text });
+      if (!entry) {
+        return response({ intent: 'assign_teacher', summary: 'Please specify which class (course, batch, day, time) needs a teacher assigned.', missing: ['course/batch', 'day', 'time'] });
+      }
+      const teacher = parsed.teacher ? await findTeacher(parsed.teacher) : null;
+      if (parsed.teacher && !teacher) return notFound('teacher', parsed.teacher);
+      if (!teacher) {
+        return response({ intent: 'assign_teacher', summary: 'Please specify which teacher to assign, e.g. "assign teacher Ali Raza to the DLD class".', missing: ['teacher'] });
+      }
+      const result = await assignTeacher({ entry, teacher });
+      if (result.conflicts.length) {
+        return response({ intent: 'assign_teacher', summary: `Cannot assign ${teacher.full_name}: conflicts were found.`, conflicts: result.conflicts });
+      }
+      return response({ intent: 'assign_teacher', summary: `${teacher.full_name} was assigned to ${entry.subject_name} (${entry.batch_name}) on ${entry.day} at ${entry.slot_label}.`, rows: [formatEntry(result.entry)] });
+    }
+
+    case 'schedule_class': {
+      const batch = parsed.batch ? await findBatch(parsed.batch) : null;
+      const subject = parsed.course ? await findSubject(parsed.course) : null;
+      const teacher = parsed.teacher ? await findTeacher(parsed.teacher) : null;
+      const room = parsed.room ? await findRoom(parsed.room) : null;
+      const missing = [];
+      if (!batch) missing.push('batch');
+      if (!subject) missing.push('course/subject');
+      if (!day) missing.push('day');
+      if (!slot) missing.push('time slot');
+      if (missing.length) {
+        return response({ intent: 'schedule_class', summary: `Please provide the missing details to schedule this class: ${missing.join(', ')}.`, missing });
+      }
+      const result = await scheduleClass({ userId: user.id, batch, subject, teacher, room, day, slot, isLab });
+      if (result.conflicts.length) {
+        return response({ intent: 'schedule_class', summary: 'This class could not be scheduled because of conflicts.', conflicts: result.conflicts });
+      }
+      return response({ intent: 'schedule_class', summary: `Scheduled ${subject.name} for ${batch.batch_name} on ${day} at ${slotLabel(slot, isLab)}.`, rows: [formatEntry(result.entry)] });
+    }
+
+    case 'reschedule_class': {
+      const entry = await resolveEntry({ course: parsed.course, batch: parsed.batch, teacher: parsed.teacher, room: parsed.room, day, slot, isLab, rawText: text });
+      if (!entry) {
+        return response({ intent: 'reschedule_class', summary: 'I could not identify a unique class to reschedule. Please include the course, batch, current day, and time.', missing: ['course/batch', 'current day', 'current time'] });
+      }
+      const finalTargetDay = targetDay || day;
+      const finalTargetSlot = targetSlot || slot;
+      const targetRoom = parsed.target_room ? await findRoom(parsed.target_room) : null;
+      if (!finalTargetDay || !finalTargetSlot) {
+        return response({ intent: 'reschedule_class', summary: 'Please specify the new day and time slot for this class.', missing: ['target day', 'target time'] });
+      }
+      const result = await rescheduleClass({ entry, day: finalTargetDay, slot: finalTargetSlot, room: targetRoom });
+      if (result.conflicts.length) {
+        return response({ intent: 'reschedule_class', summary: 'This class could not be rescheduled because of conflicts.', conflicts: result.conflicts });
+      }
+      return response({
+        intent: 'reschedule_class',
+        summary: `Moved ${entry.subject_name} (${entry.batch_name}) from ${entry.day} ${entry.slot_label} to ${finalTargetDay} ${slotLabel(finalTargetSlot, entry.is_lab)}.`,
+        rows: [formatEntry(result.entry)],
+      });
+    }
+
+    case 'find_available_slots': {
+      const batch = parsed.batch ? await findBatch(parsed.batch) : null;
+      const teacher = parsed.teacher ? await findTeacher(parsed.teacher) : null;
+      if (batch) {
+        const rows = [];
+        for (const d of DAYS) rows.push(...await getFreePeriods({ day: d, batchId: batch.id }));
+        return response({ intent: 'find_available_slots', summary: rows.length ? `Here are free slots for ${batch.batch_name}.` : `No free slots found for ${batch.batch_name}.`, rows: rows.map(r => ({ ...r, batch: batch.batch_name })) });
+      }
+      if (teacher) {
+        const rows = [];
+        for (const d of DAYS) rows.push(...await getFreePeriods({ day: d, teacherId: teacher.id }));
+        return response({ intent: 'find_available_slots', summary: rows.length ? `Here are free slots for ${teacher.full_name}.` : `No free slots found for ${teacher.full_name}.`, rows: rows.map(r => ({ ...r, teacher: teacher.full_name })) });
+      }
+      return response({ intent: 'find_available_slots', summary: 'Please specify a batch or teacher to find free slots for.', missing: ['batch or teacher'] });
+    }
+
+    case 'find_available_rooms': {
+      if (!day || !slot) {
+        return response({ intent: 'find_available_rooms', summary: 'Please provide a day and time to find available rooms.', missing: ['day', 'time'] });
+      }
+      const rooms = (await pool.query('SELECT id, room_id, capacity, room_type, is_available FROM rooms ORDER BY room_id')).rows;
       const rows = [];
-      for (const d of DAYS) rows.push(...await getFreePeriods({ day: d, batchId: batch.id }));
-      return response({ intent: 'find_available_slots', summary: rows.length ? `Here are free slots for ${batch.batch_name}.` : `No free slots found for ${batch.batch_name}.`, rows: rows.map(r => ({ ...r, batch: batch.batch_name })) });
+      for (const r of rooms) {
+        if (!r.is_available) continue;
+        const c = await getSlotOccupants({ day, slot, isLab, roomId: r.id });
+        if (!c.length) rows.push({ classroom: r.room_id, day, time: slotLabel(slot, isLab), availabilityStatus: 'Available', conflictStatus: 'None' });
+      }
+      return response({ intent: 'find_available_rooms', summary: rows.length ? 'Here are the available classrooms for the requested slot.' : 'No free classrooms were found for the requested slot.', rows });
     }
-    if (teacher) {
-      const rows = [];
-      for (const d of DAYS) rows.push(...await getFreePeriods({ day: d, teacherId: teacher.id }));
-      return response({ intent: 'find_available_slots', summary: rows.length ? `Here are free slots for ${teacher.full_name}.` : `No free slots found for ${teacher.full_name}.`, rows: rows.map(r => ({ ...r, teacher: teacher.full_name })) });
+
+    case 'conflict_check': {
+      const entry = await resolveEntry({ course: parsed.course, batch: parsed.batch, teacher: parsed.teacher, room: parsed.room, day, slot, isLab, rawText: text });
+      if (!entry) return response({ intent: 'conflict_check', summary: 'No scheduled class was found to check conflicts against.' });
+      const alternatives = await findAlternatives(entry, 10);
+      return response({ intent: 'conflict_check', summary: alternatives.length ? 'Here are conflict-free alternatives.' : 'No conflict-free alternatives were found.', alternatives });
     }
-    return response({ intent: 'find_available_slots', summary: 'Please specify a batch or teacher to find free slots for.', missing: ['batch or teacher'] });
-  }
 
-  if (/\bavailable classroom|available classrooms|free rooms|available rooms|find rooms\b/.test(lower)) {
-    const entries = await getAllEntries({ day });
-    const entry = inferEntry(entries, text);
-    if (!day || !slot) {
-      return response({ intent: 'find_available_rooms', summary: 'Please provide a day and time (or reference an existing class) to find available rooms.', missing: ['day', 'time'] });
-    }
-    const rooms = (await pool.query('SELECT id, room_id, capacity, room_type, is_available FROM rooms ORDER BY room_id')).rows;
-    const rows = [];
-    for (const r of rooms) {
-      if (!r.is_available) continue;
-      const c = await getSlotOccupants({ day, slot, isLab: isLabText(text), roomId: r.id, excludeId: entry?.id });
-      if (!c.length) rows.push({ classroom: r.room_id, day, time: slotLabel(slot, isLabText(text)), availabilityStatus: 'Available', conflictStatus: 'None' });
-    }
-    return response({ intent: 'find_available_rooms', summary: rows.length ? 'Here are the available classrooms for the requested slot.' : 'No free classrooms were found for the requested slot.', rows });
-  }
-
-  if (/\bconflict|alternative\b/.test(lower)) {
-    const entries = await getAllEntries({ day });
-    const entry = inferEntry(entries, text) || entries[0];
-    if (!entry) return response({ intent: 'conflict_check', summary: 'No scheduled class was found to check conflicts against.' });
-    const alternatives = await findAlternatives(entry, 10);
-    return response({ intent: 'conflict_check', summary: alternatives.length ? 'Here are conflict-free alternatives.' : 'No conflict-free alternatives were found.', alternatives });
-  }
-
-  if (/\b(available|availability|free)\b/.test(lower)) {
-    const room = await findRoom(text);
-    const batch = await findBatch(text);
-    const teacher = await findTeacher(text);
-
-    // "When is X free on Monday" gives a day but no specific time — that's a
-    // request for every free period that day, not a single-slot check, so
-    // handle it before demanding an exact time slot.
-    if (day && !slot && (teacher || batch || room)) {
+    case 'free_periods': {
+      const teacher = parsed.teacher ? await findTeacher(parsed.teacher) : null;
+      const batch = !teacher && parsed.batch ? await findBatch(parsed.batch) : null;
+      const room = !teacher && !batch && parsed.room ? await findRoom(parsed.room) : null;
       const target = teacher
         ? { idFilter: { teacherId: teacher.id }, label: teacher.full_name }
         : batch
         ? { idFilter: { batchId: batch.id }, label: batch.batch_name }
-        : { idFilter: { roomId: room.id }, label: room.room_id };
+        : room
+        ? { idFilter: { roomId: room.id }, label: room.room_id }
+        : null;
+      if (!target) return response({ intent: 'free_periods', summary: 'Please mention a room, batch, or teacher to check free periods for.', missing: ['room/batch/teacher'] });
+      if (!day) return response({ intent: 'free_periods', summary: 'Please specify a day to check free periods for.', missing: ['day'] });
       const rows = await getFreePeriods({ day, ...target.idFilter });
       return response({
         intent: 'free_periods',
@@ -672,105 +698,53 @@ async function handleAssistantAgentMessage({ user, message }) {
       });
     }
 
-    if (!day || !slot) {
-      return response({ intent: 'availability_check', summary: 'Please provide both day and time slot so I can check live availability.', missing: ['day', 'time slot'] });
-    }
-    const rows = [];
-    const conflicts = [];
+    case 'availability_check': {
+      if (!day || !slot) {
+        return response({ intent: 'availability_check', summary: 'Please provide both day and time slot so I can check live availability.', missing: ['day', 'time slot'] });
+      }
+      const room = parsed.room ? await findRoom(parsed.room) : null;
+      const batch = parsed.batch ? await findBatch(parsed.batch) : null;
+      const teacher = parsed.teacher ? await findTeacher(parsed.teacher) : null;
 
-    const requestedRoom = requestedRoomName(text);
-    if (requestedRoom && !room) {
-      return response({ intent: 'availability_check', summary: `${requestedRoom} was not found in the room database.`, conflicts: [{ type: 'room_not_found', message: `${requestedRoom} does not exist in the rooms table.` }] });
-    }
-    const requestedBatch = requestedBatchName(text);
-    if (requestedBatch && !batch) {
-      return response({ intent: 'availability_check', summary: `${requestedBatch} was not found in the batch database.`, conflicts: [{ type: 'batch_not_found', message: `${requestedBatch} does not exist in the batches table.` }] });
+      if (parsed.room && !room) return notFound('room', parsed.room);
+      if (parsed.batch && !batch) return notFound('batch', parsed.batch);
+      if (parsed.teacher && !teacher) return notFound('teacher', parsed.teacher);
+      if (!room && !batch && !teacher) {
+        return response({ intent: 'availability_check', summary: 'Please mention a room, batch, or teacher to check availability for.', missing: ['room/batch/teacher'] });
+      }
+
+      const rows = [];
+      const conflicts = [];
+      if (room) {
+        const roomConflicts = await getSlotOccupants({ day, slot, isLab, roomId: room.id });
+        conflicts.push(...roomConflicts.map(r => ({ type: 'room', message: conflictMessage('room', r) })));
+        rows.push({ classroom: room.room_id, day, time: slotLabel(slot, isLab), availabilityStatus: roomConflicts.length || !room.is_available ? 'Unavailable' : 'Available', conflictStatus: roomConflicts.length ? 'Conflict detected' : 'None' });
+      }
+      if (batch) {
+        const batchConflicts = await getSlotOccupants({ day, slot, isLab, batchId: batch.id });
+        conflicts.push(...batchConflicts.map(r => ({ type: 'batch', message: conflictMessage('batch', r) })));
+        rows.push({ batch: batch.batch_name, day, time: slotLabel(slot, isLab), availabilityStatus: batchConflicts.length ? 'Unavailable' : 'Available', conflictStatus: batchConflicts.length ? 'Conflict detected' : 'None' });
+      }
+      if (teacher) {
+        const teacherConflicts = await getSlotOccupants({ day, slot, isLab, teacherId: teacher.id });
+        conflicts.push(...teacherConflicts.map(r => ({ type: 'teacher', message: conflictMessage('teacher', r) })));
+        rows.push({ teacher: teacher.full_name, day, time: slotLabel(slot, isLab), availabilityStatus: teacherConflicts.length ? 'Unavailable' : 'Available', conflictStatus: teacherConflicts.length ? 'Conflict detected' : 'None' });
+      }
+      return response({ intent: 'availability_check', summary: conflicts.length ? 'Availability checked. Conflicts were found.' : 'Availability checked. No conflicts were found.', rows, conflicts });
     }
 
-    if (room) {
-      const roomConflicts = await getSlotOccupants({ day, slot, isLab: isLabText(text), roomId: room.id });
-      conflicts.push(...roomConflicts.map(r => ({ type: 'room', message: conflictMessage('room', r) })));
-      rows.push({ classroom: room.room_id, day, time: slotLabel(slot, isLabText(text)), availabilityStatus: roomConflicts.length || !room.is_available ? 'Unavailable' : 'Available', conflictStatus: roomConflicts.length ? 'Conflict detected' : 'None' });
-    }
-    if (batch) {
-      const batchConflicts = await getSlotOccupants({ day, slot, isLab: isLabText(text), batchId: batch.id });
-      conflicts.push(...batchConflicts.map(r => ({ type: 'batch', message: conflictMessage('batch', r) })));
-      rows.push({ batch: batch.batch_name, day, time: slotLabel(slot, isLabText(text)), availabilityStatus: batchConflicts.length ? 'Unavailable' : 'Available', conflictStatus: batchConflicts.length ? 'Conflict detected' : 'None' });
-    }
-    if (teacher) {
-      const teacherConflicts = await getSlotOccupants({ day, slot, isLab: isLabText(text), teacherId: teacher.id });
-      conflicts.push(...teacherConflicts.map(r => ({ type: 'teacher', message: conflictMessage('teacher', r) })));
-      rows.push({ teacher: teacher.full_name, day, time: slotLabel(slot, isLabText(text)), availabilityStatus: teacherConflicts.length ? 'Unavailable' : 'Available', conflictStatus: teacherConflicts.length ? 'Conflict detected' : 'None' });
-    }
-    if (!room && !batch && !teacher) {
-      return response({ intent: 'availability_check', summary: 'Please mention a room, batch, or teacher to check availability for.', missing: ['room/batch/teacher'] });
-    }
-    return response({ intent: 'availability_check', summary: conflicts.length ? 'Availability checked. Conflicts were found.' : 'Availability checked. No conflicts were found.', rows, conflicts });
-  }
+    case 'unclear':
+      return response({ intent: 'unclear', summary: 'I did not fully understand that request. Could you rephrase it with the course, batch, day, and time involved?', missing: parsed.missing || [] });
 
-  // ---- View schedules ----
-  if (/\btoday|tomorrow|weekly|week\b/.test(lower) || day) {
-    // A day/week phrase can still be paired with a specific room, batch, or
-    // teacher (e.g. "classes in C-62 on Monday") — check those first so the
-    // day filter doesn't silently swallow the more specific request.
-    const roomForDay = await findRoom(text);
-    if (roomForDay) {
-      const entries = await getAllEntries({ day: day || undefined, roomId: roomForDay.id });
+    case 'out_of_scope':
+      return response({ intent: 'out_of_scope', summary: "That's outside what I can help with — I only handle timetable scheduling, availability, and admin requests." });
+
+    default:
       return response({
-        intent: 'view_room_schedule',
-        summary: entries.length ? `Here is the schedule for ${roomForDay.room_id}${day ? ` on ${day}` : ''}.` : `No scheduled entries were found for ${roomForDay.room_id}${day ? ` on ${day}` : ''}.`,
-        rows: entries.map(formatEntry),
+        intent: 'help',
+        summary: 'I can schedule new classes, reschedule or cancel existing ones, assign teachers, check availability and conflicts, find free rooms/slots, review and approve/reject pending requests, and run teacher workload or room utilization reports.',
       });
-    }
-    const batchForDay = await findBatch(text);
-    if (batchForDay) {
-      const entries = await getAllEntries({ day: day || undefined, batchId: batchForDay.id });
-      return response({
-        intent: 'view_batch_schedule',
-        summary: entries.length ? `Here is the schedule for ${batchForDay.batch_name}${day ? ` on ${day}` : ''}.` : `No scheduled entries were found for ${batchForDay.batch_name}${day ? ` on ${day}` : ''}.`,
-        rows: entries.map(formatEntry),
-      });
-    }
-    const teacherForDay = await findTeacher(text);
-    if (teacherForDay) {
-      const entries = await getAllEntries({ day: day || undefined, teacherId: teacherForDay.id });
-      return response({
-        intent: 'view_teacher_schedule',
-        summary: entries.length ? `Here is the schedule for ${teacherForDay.full_name}${day ? ` on ${day}` : ''}.` : `No scheduled entries were found for ${teacherForDay.full_name}${day ? ` on ${day}` : ''}.`,
-        rows: entries.map(formatEntry),
-      });
-    }
-
-    const entries = await getAllEntries({ day: day || undefined });
-    return response({
-      intent: day ? 'view_day' : 'view_weekly',
-      summary: entries.length ? `Here is the timetable${day ? ` for ${day}` : ' for the week'}.` : 'No scheduled entries were found.',
-      rows: entries.map(formatEntry),
-    });
   }
-
-  const teacherLookup = await findTeacher(text);
-  if (teacherLookup && /\bschedule|timetable|classes\b/.test(lower)) {
-    const entries = await getAllEntries({ teacherId: teacherLookup.id });
-    return response({ intent: 'view_teacher_schedule', summary: `Here is the schedule for ${teacherLookup.full_name}.`, rows: entries.map(formatEntry) });
-  }
-
-  const batchLookup = await findBatch(text);
-  if (batchLookup && /\bschedule|timetable|classes\b/.test(lower)) {
-    const entries = await getAllEntries({ batchId: batchLookup.id });
-    return response({ intent: 'view_batch_schedule', summary: `Here is the schedule for ${batchLookup.batch_name}.`, rows: entries.map(formatEntry) });
-  }
-
-  const roomLookup = await findRoom(text);
-  if (roomLookup && /\bschedule|timetable|classes\b/.test(lower)) {
-    const entries = await getAllEntries({ roomId: roomLookup.id });
-    return response({ intent: 'view_room_schedule', summary: `Here is the schedule for ${roomLookup.room_id}.`, rows: entries.map(formatEntry) });
-  }
-
-  return response({
-    intent: 'help',
-    summary: 'I can schedule new classes, reschedule or cancel existing ones, assign teachers, check availability and conflicts, find free rooms/slots, review and approve/reject pending requests, and run teacher workload or room utilization reports.',
-  });
 }
 
 module.exports = {
