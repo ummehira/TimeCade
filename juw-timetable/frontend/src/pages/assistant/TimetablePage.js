@@ -1,7 +1,6 @@
 // frontend/src/pages/assistant/TimetablePage.js
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../utils/api';
-import { useResponsive } from '../../hooks/useResponsive';
 import SearchSelect from '../../components/common/SearchSelect';
 import ExportButtons from '../../components/common/ExportButtons';
 
@@ -47,50 +46,36 @@ function ConflictAlert({ conflicts, onClose }) {
 }
 
 // ── Add Class Form ────────────────────────────────────────────────────────
-function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading }) {
-  const { isMobile } = useResponsive();
+function AddClassForm({ selectedBatch, semester, batches, onBatchChange }) {
   const [formBatch,      setFormBatch]      = useState(selectedBatch||'');
   const [formSemester,   setFormSemester]   = useState(semester||1);
   const [batchCourses,   setBatchCourses]   = useState([]);
-  const [courseTeachers, setCourseTeachers] = useState([]);
-  const [form, setForm] = useState({ subject_id:'', teacher_id:'', room_id:'', day:'', time_slot:'', is_lab:false, is_shared:false });
-  const set = (k,v) => setForm(f=>({...f,[k]:v}));
-
   const [batchDefaultRoom, setBatchDefaultRoom] = useState(null);
+  const [courseSearch, setCourseSearch] = useState('');
+  const [coursesOpen, setCoursesOpen] = useState(false);
 
   useEffect(()=>{ if(selectedBatch) setFormBatch(selectedBatch); },[selectedBatch]);
   useEffect(()=>{ setFormSemester(semester); },[semester]);
 
   useEffect(()=>{
     if(!formBatch){ setBatchCourses([]); setBatchDefaultRoom(null); return; }
-    // Load courses for batch
     api.get('/assignments/batch-courses',{params:{batch_id:formBatch,semester:formSemester}})
       .then(r=>setBatchCourses(r.data)).catch(()=>setBatchCourses([]));
-    // Load batch default room from batches state
     const batch = batches.find(b=>String(b.id)===String(formBatch));
     const defRoom = batch?.default_room_id || null;
     setBatchDefaultRoom(defRoom ? String(defRoom) : null);
-    if(defRoom) set('room_id', String(defRoom));
-    setForm(f=>({...f,subject_id:'',teacher_id:''}));
-    setCourseTeachers([]);
+    setCoursesOpen(false);
   },[formBatch,formSemester]);
 
-  useEffect(()=>{
-    if(!form.subject_id){ setCourseTeachers([]); return; }
-    api.get('/assignments/course-teachers',{params:{subject_id:form.subject_id}})
-      .then(r=>setCourseTeachers(r.data)).catch(()=>setCourseTeachers([]));
-    set('teacher_id','');
-  },[form.subject_id]);
-
-  const course    = batchCourses.find(s=>String(s.id)===String(form.subject_id));
-  const isFYP     = course?.credit_format === '0+3' ||
-                    /fyp|final.year.project|fyp-i|fyp-ii|fyp1|fyp2/i.test(
-                      (course?.name||'')+' '+(course?.code||'')+' '+(course?.short_name||'')
-                    );
-  const slotLabel = form.time_slot ? (form.is_lab ? LAB_SLOTS[form.time_slot] : SLOTS.find(s=>s.id===parseInt(form.time_slot))?.full) : null;
-  const roomReady = form.room_id; // always use form.room_id — either auto-set from default or manually chosen
-  const teacherReady = isFYP || form.teacher_id;
-  const canAdd    = formBatch&&roomReady&&form.subject_id&&teacherReady&&form.day&&form.time_slot&&!loading;
+  // A course that has a lab component becomes two distinct draggable cards — one for the
+  // theory portion (1h), one for the lab portion (3h) — instead of a single ambiguous card.
+  const courseCards = batchCourses.flatMap(s => s.has_lab
+    ? [
+        { ...s, cardKey:`${s.id}-lab`,    is_lab:true,  variantLabel:'Lab',     durationLabel:'Lab · 3h' },
+        { ...s, cardKey:`${s.id}-theory`, is_lab:false, variantLabel:'Theory', durationLabel:'Theory · 1h' },
+      ]
+    : [{ ...s, cardKey:`${s.id}-reg`, is_lab:false, variantLabel:'Regular', durationLabel:'Regular · 1h' }]
+  );
 
   const fl = { fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',display:'block',marginBottom:'5px' };
   const fi = { width:'100%',padding:'8px 10px',border:'1px solid #dde3e8',borderRadius:'6px',fontSize:'12px',fontFamily:'inherit',color:'#1a2e3a',outline:'none',background:'white' };
@@ -100,17 +85,25 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
       <div style={{ fontSize:'13px',fontWeight:'700',color:'#1a2e3a',marginBottom:'14px' }}>Add New Class</div>
 
       {/* Batch + Session */}
-      <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'10px',marginBottom:'12px',padding:'12px',background:'#f8fafc',borderRadius:'8px',border:'1px solid #e8edf0' }}>
+      <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'12px',padding:'12px',background:'#f8fafc',borderRadius:'8px',border:'1px solid #e8edf0' }}>
         <div>
           <label style={fl}>Batch *</label>
-          <select value={formBatch||''} onChange={e=>{ setFormBatch(parseInt(e.target.value)||''); setFormSemester(1); }} style={fi}>
+          <select value={formBatch||''} onChange={e=>{
+            const b = parseInt(e.target.value)||'';
+            setFormBatch(b); setFormSemester(1);
+            onBatchChange?.(b, 1);
+          }} style={fi}>
             <option value="">-- Select Batch --</option>
             {(batches||[]).map(b=><option key={b.id} value={b.id}>{b.batch_name}</option>)}
           </select>
         </div>
         <div>
           <label style={fl}>Session *</label>
-          <select value={formSemester} onChange={e=>setFormSemester(parseInt(e.target.value))} disabled={!formBatch}
+          <select value={formSemester} onChange={e=>{
+            const s = parseInt(e.target.value);
+            setFormSemester(s);
+            onBatchChange?.(formBatch, s);
+          }} disabled={!formBatch}
             style={{ ...fi,background:!formBatch?'#f0f4f7':'white',color:!formBatch?'#aabbc8':'#1a2e3a' }}>
             <option value={1}>Session 1 (First Semester)</option>
             <option value={2}>Session 2 (Second Semester)</option>
@@ -118,106 +111,86 @@ function AddClassForm({ rooms, selectedBatch, semester, batches, onAdd, loading 
         </div>
       </div>
 
-      {/* Course + Teacher */}
-      <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'10px',marginBottom:'10px' }}>
-        <div>
-          <label style={fl}>Course {formBatch&&batchCourses.length===0&&<span style={{ color:'#d97706',fontWeight:'400',textTransform:'none' }}>(assign subjects first)</span>}</label>
-          <select value={form.subject_id} onChange={e=>set('subject_id',e.target.value)} disabled={!formBatch} style={{ ...fi,background:!formBatch?'#f8fafc':'white' }}>
-            <option value="">-- Select Course --</option>
-            {batchCourses.map(s=><option key={s.id} value={s.id}>{s.name}{s.has_lab?' (Lab)':''}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={fl}>
-            Teacher{' '}
-            {isFYP
-              ? <span style={{ color:'#d97706',fontWeight:'600',textTransform:'none',background:'#fef3c7',border:'1px solid #fde68a',borderRadius:'4px',padding:'1px 6px',fontSize:'9px' }}>Optional for FYP</span>
-              : form.subject_id&&courseTeachers.length===0&&<span style={{ color:'#d97706',fontWeight:'400',textTransform:'none' }}>(assign teachers first)</span>
-            }
-          </label>
-          <select value={form.teacher_id} onChange={e=>set('teacher_id',e.target.value)} disabled={!form.subject_id} style={{ ...fi,background:!form.subject_id?'#f8fafc':'white' }}>
-            <option value="">{isFYP ? '-- No supervisor (individual groups)' : '-- Select Teacher --'}</option>
-            {courseTeachers.map(t=><option key={t.id} value={t.id}>{t.full_name}</option>)}
-          </select>
-        </div>
-      </div>
-      {/* Room — pre-selects batch default but can be changed manually */}
-      <div style={{ marginBottom:'10px' }}>
-        <label style={fl}>
-          Room *
-          {batchDefaultRoom && (
-            <span style={{ fontWeight:'400',textTransform:'none',color:'#16a34a',marginLeft:'6px' }}>
-              (default: {(rooms||[]).find(r=>String(r.id)===String(batchDefaultRoom))?.room_id})
-            </span>
-          )}
-        </label>
-        <select
-          value={form.room_id||''}
-          onChange={e=>set('room_id', e.target.value)}
-          disabled={!formBatch}
-          style={{ ...fi, maxWidth:'320px', background:!formBatch?'#f8fafc':'white' }}
-        >
-          <option value="">-- Select Room --</option>
-          {(rooms||[]).map(r=>(
-            <option key={r.id} value={r.id}>
-              {r.room_id} — Cap: {r.capacity} · {r.room_type==='lab'?'Lab':'Classroom'}
-              {String(r.id)===String(batchDefaultRoom)?' (batch default)':''}
-            </option>
-          ))}
-        </select>
-        {formBatch && !batchDefaultRoom && (
-          <div style={{ fontSize:'10px',color:'#d97706',marginTop:'4px' }}>
-            No default room set for this batch — select manually or set a default in Batch Management.
-          </div>
-        )}
-      </div>
+      {/* Course (card grid — drag a card straight onto the timetable to schedule it) */}
+      <div>
+        <label style={fl}>Course {formBatch&&batchCourses.length===0&&<span style={{ color:'#d97706',fontWeight:'400',textTransform:'none' }}>(assign subjects first)</span>}</label>
 
-      {/* Day + Time + Lab + Submit */}
-      <div style={{ display:'flex',gap:'10px',alignItems:'flex-end',flexWrap:'wrap' }}>
-        <div style={{ flex:'1 1 120px' }}>
-          <label style={fl}>Day</label>
-          <SearchSelect options={DAYS.map(d=>({ value:d, label:d }))} value={form.day} onChange={v=>set('day',v)} placeholder="Select Day"/>
-        </div>
-        <div style={{ flex:'1 1 140px' }}>
-          <label style={fl}>Time Slot</label>
-          <SearchSelect
-            options={SLOTS
-              .filter(s=> !form.is_lab || VALID_LAB_SLOTS.includes(s.id))
-              .map(s=>({ value:s.id, label:form.is_lab?LAB_SLOTS[s.id]:s.full,
-                disabled: form.is_lab && !VALID_LAB_SLOTS.includes(s.id) }))}
-            value={form.time_slot}
-            onChange={v=>{ set('time_slot',v); }}
-            placeholder="Select Time"
-          />
-        </div>
-        <label style={{ display:'flex',alignItems:'center',gap:'7px',padding:'8px 12px',background:'#f8fafc',borderRadius:'7px',border:'1px solid #e0e8ed',cursor:'pointer',whiteSpace:'nowrap',height:'36px',boxSizing:'border-box' }}>
-          <input type="checkbox" checked={form.is_lab} onChange={e=>{
-            const newIsLab = e.target.checked;
-            set('is_lab', newIsLab);
-            // Clear time slot if it's invalid for a lab
-            if(newIsLab && form.time_slot && !VALID_LAB_SLOTS.includes(parseInt(form.time_slot))){
-              set('time_slot','');
-            }
-          }} style={{ width:'14px',height:'14px',accentColor:CELL_GREEN,cursor:'pointer' }}/>
-          <span style={{ fontSize:'12px',fontWeight:'600',color:'#1a2e3a',display:'flex',alignItems:'center',gap:'5px' }}>
-            <span style={{ background:'#dcfce7',color:'#166534',borderRadius:'4px',padding:'1px 6px',fontSize:'10px',fontWeight:'700' }}>LAB</span>
-            3-hour slot
-            {course?.has_lab&&<span style={{ color:'#16a34a',fontSize:'10px' }}>✓</span>}
+        {/* Trigger bar — click to reveal the draggable course cards */}
+        <div
+          onClick={()=>{ if(formBatch&&courseCards.length>0) setCoursesOpen(o=>!o); }}
+          style={{
+            display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px',
+            padding:'8px 10px', border:`1px solid ${coursesOpen?'#2d4a5a':'#dde3e8'}`, borderRadius:'8px',
+            background:formBatch?(coursesOpen?'#eaf1f5':'white'):'#f8fafc',
+            cursor:formBatch&&courseCards.length>0?'pointer':'default',
+            opacity:formBatch?1:0.6,
+          }}
+        >
+          <span style={{ fontSize:'12px',fontWeight:'700',color:'#1a2e3a' }}>
+            {formBatch?`${courseCards.length} course card${courseCards.length===1?'':'s'} — click to browse & drag`:'-- Select a batch first --'}
           </span>
-        </label>
-        <label style={{ display:'flex',alignItems:'center',gap:'7px',padding:'8px 12px',background:'#fefce8',borderRadius:'7px',border:'1px solid #fde68a',cursor:'pointer',whiteSpace:'nowrap',height:'36px',boxSizing:'border-box' }}>
-          <input type="checkbox" checked={form.is_shared||false} onChange={e=>set('is_shared',e.target.checked)}
-            style={{ width:'14px',height:'14px',accentColor:'#d97706',cursor:'pointer' }}/>
-          <span style={{ fontSize:'12px',fontWeight:'600',color:'#92400e',display:'flex',alignItems:'center',gap:'5px' }}>
-            <span style={{ background:'#fef3c7',color:'#d97706',borderRadius:'4px',padding:'1px 6px',fontSize:'10px',fontWeight:'700' }}>SHARED</span>
-            Multi-batch
-          </span>
-        </label>
-        {slotLabel&&<span style={{ fontSize:'11px',fontWeight:'600',color:form.is_lab?'#166534':'#2d4a5a',background:form.is_lab?'#dcfce7':'#e8f4fd',border:`1px solid ${form.is_lab?'#86efac':'#b8d9f5'}`,borderRadius:'5px',padding:'4px 10px',whiteSpace:'nowrap' }}>{slotLabel}</span>}
-        <button type="button" disabled={!canAdd} onClick={()=>onAdd({...form,batch_id:formBatch,semester:formSemester,is_shared:form.is_shared||false})}
-          style={{ background:CELL_NAVY,color:'white',border:'none',padding:'9px 20px',borderRadius:'7px',fontSize:'12px',fontWeight:'700',cursor:canAdd?'pointer':'not-allowed',fontFamily:'inherit',whiteSpace:'nowrap',opacity:canAdd?1:0.4 }}>
-          {loading?'Adding...':'Add Class'}
-        </button>
+          {formBatch && courseCards.length>0 && (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5a7080" strokeWidth="2.5"
+              style={{ transform:coursesOpen?'rotate(180deg)':'none', transition:'transform .12s ease' }}>
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          )}
+        </div>
+
+        {coursesOpen && (
+        <div style={{ border:'1px solid #dde3e8',borderTop:'none',borderRadius:'0 0 8px 8px',background:'#fbfbfd',padding:'8px',marginTop:'-1px' }}>
+          {courseCards.length>4&&(
+            <input
+              value={courseSearch}
+              onChange={e=>setCourseSearch(e.target.value)}
+              placeholder="Search courses..."
+              autoFocus
+              style={{ width:'100%',padding:'6px 9px',border:'1px solid #e0e8ed',borderRadius:'6px',fontSize:'11px',fontFamily:'inherit',marginBottom:'7px',outline:'none',background:'white' }}
+            />
+          )}
+          <div style={{ display:'flex',flexWrap:'wrap',gap:'6px',maxHeight:'220px',overflowY:'auto',paddingRight:'2px' }}>
+            {courseCards
+              .filter(s=>s.name.toLowerCase().includes(courseSearch.toLowerCase()))
+              .map(s=>(
+                <div
+                  key={s.cardKey}
+                  draggable
+                  onDragStart={e=>{
+                    const payload = { subject_id:s.id, subject_name:s.name, credit_format:s.credit_format, code:s.code, short_name:s.short_name, batch_id:formBatch, semester:formSemester, room_id:batchDefaultRoom, is_lab:s.is_lab };
+                    e.dataTransfer.setData('application/x-course', JSON.stringify(payload));
+                    if(s.is_lab) e.dataTransfer.setData('application/x-course-lab', '1');
+                    e.dataTransfer.effectAllowed = 'copy';
+                  }}
+                  title="Drag onto the timetable to schedule it"
+                  style={{
+                    position:'relative', width:'132px', padding:'8px 9px', borderRadius:'8px', cursor:'grab',
+                    border:'1.5px solid #e0e8ed', background:'white',
+                    transition:'border-color .12s ease, transform .12s ease',
+                    userSelect:'none',
+                  }}
+                >
+                  <div style={{ fontSize:'11.5px',fontWeight:'700',color:'#1a2e3a',lineHeight:'1.3' }}>{s.name}</div>
+                  {s.variantLabel!=='Regular' && (
+                    <div style={{ fontSize:'9.5px',fontWeight:'600',color:'#7a8aa0',marginTop:'1px' }}>({s.variantLabel})</div>
+                  )}
+                  <span style={{
+                    display:'inline-block', marginTop:'5px', fontSize:'8.5px', fontWeight:'800', textTransform:'uppercase', letterSpacing:'0.4px',
+                    padding:'2px 6px', borderRadius:'4px',
+                    background:s.is_lab?'#dcfce7':'#eef0f5', color:s.is_lab?'#166534':'#6b7690'
+                  }}>{s.durationLabel}</span>
+                </div>
+              ))}
+            {formBatch && courseCards.length>0 && courseCards.filter(s=>s.name.toLowerCase().includes(courseSearch.toLowerCase())).length===0 && (
+              <div style={{ fontSize:'11px',color:'#aabbc8',padding:'6px 2px' }}>No courses match "{courseSearch}"</div>
+            )}
+          </div>
+          {courseCards.length>0 && (
+            <div style={{ fontSize:'9.5px',color:'#aabbc8',marginTop:'7px',paddingTop:'6px',borderTop:'1px solid #f0f4f7' }}>
+              Drag a card onto the timetable — day, time, room, and teacher are all set in the popup when you drop it.
+            </div>
+          )}
+        </div>
+        )}
       </div>
     </div>
   );
@@ -311,7 +284,127 @@ function EditCardPopup({ entry, teachers, rooms, onSave, onDelete, onClose }) {
 
 
 
-// ── Searchable dropdown ────────────────────────────────────────────────────
+// ── Assign Teacher Modal ──────────────────────────────────────────────────
+// Shown when a course card is dropped straight onto the grid — day/time/room/lab
+// are already known from the drop, this just collects who's teaching it.
+function AssignTeacherModal({ drop, rooms, onConfirm, onCancel, loading }) {
+  const [courseTeachers, setCourseTeachers] = useState([]);
+  const [teacherId,      setTeacherId]      = useState('');
+  const [loadingTeachers,setLoadingTeachers] = useState(true);
+  const [roomId,         setRoomId]         = useState(drop.payload.room_id||'');
+  const [isShared,       setIsShared]       = useState(false);
+
+  const { payload, day, slot } = drop;
+  const isFYP = payload.credit_format === '0+3' ||
+    /fyp|final.year.project|fyp-i|fyp-ii|fyp1|fyp2/i.test(
+      (payload.subject_name||'')+' '+(payload.code||'')+' '+(payload.short_name||'')
+    );
+  const timeLabel = payload.is_lab ? LAB_SLOTS[slot] : SLOTS.find(s=>s.id===slot)?.full;
+
+  useEffect(()=>{
+    setLoadingTeachers(true);
+    api.get('/assignments/course-teachers',{params:{subject_id:payload.subject_id}})
+      .then(r=>setCourseTeachers(r.data))
+      .catch(()=>setCourseTeachers([]))
+      .finally(()=>setLoadingTeachers(false));
+  },[payload.subject_id]);
+
+  const canConfirm = roomId && (isFYP || teacherId);
+
+  return (
+    <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center' }}
+      onClick={e=>{ if(e.target===e.currentTarget) onCancel(); }}>
+      <div style={{ background:'white',borderRadius:'16px',width:'400px',boxShadow:'0 24px 70px rgba(0,0,0,0.3)',border:'1px solid #e0e8ed',overflow:'hidden' }}>
+
+        {/* Header */}
+        <div style={{ background:CELL_NAVY,padding:'18px 20px' }}>
+          <div style={{ fontSize:'16px',fontWeight:'800',color:'white',marginBottom:'5px' }}>{payload.subject_name||'New Class'}</div>
+          <div style={{ display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap' }}>
+            <span style={{ background:'rgba(255,255,255,0.2)',color:'white',fontSize:'10px',fontWeight:'700',padding:'2px 9px',borderRadius:'8px' }}>{payload.is_lab?'Lab Session':'Regular Class'}</span>
+            <span style={{ fontSize:'11px',color:'rgba(255,255,255,0.75)' }}>{day}</span>
+            <span style={{ fontSize:'11px',color:'rgba(255,255,255,0.5)' }}>·</span>
+            <span style={{ fontSize:'11px',color:'rgba(255,255,255,0.75)' }}>{timeLabel}</span>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding:'20px' }}>
+
+          <label style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px',display:'block',marginBottom:'5px' }}>Room *</label>
+          <select value={roomId} onChange={e=>setRoomId(e.target.value)}
+            style={{ width:'100%',padding:'8px 10px',border:'1px solid #dde3e8',borderRadius:'6px',fontSize:'12px',fontFamily:'inherit',color:'#1a2e3a',outline:'none',background:'white',marginBottom:'12px' }}>
+            <option value="">-- Select Room --</option>
+            {(rooms||[]).map(r=>(
+              <option key={r.id} value={r.id}>
+                {r.room_id} — Cap: {r.capacity} · {r.room_type==='lab'?'Lab':'Classroom'}
+                {String(r.id)===String(drop.payload.room_id)?' (batch default)':''}
+              </option>
+            ))}
+          </select>
+
+          <label style={{ display:'flex',alignItems:'center',gap:'8px',padding:'8px 11px',background:'#fefce8',borderRadius:'7px',border:'1px solid #fde68a',cursor:'pointer',marginBottom:'14px' }}>
+            <input type="checkbox" checked={isShared} onChange={e=>setIsShared(e.target.checked)}
+              style={{ width:'14px',height:'14px',accentColor:'#d97706',cursor:'pointer' }}/>
+            <span style={{ fontSize:'12px',fontWeight:'600',color:'#92400e',display:'flex',alignItems:'center',gap:'6px' }}>
+              <span style={{ background:'#fef3c7',color:'#d97706',borderRadius:'4px',padding:'1px 6px',fontSize:'10px',fontWeight:'700' }}>SHARED</span>
+              Multi-batch class
+            </span>
+          </label>
+
+          <div style={{ fontSize:'12px',color:'#5a7080',marginBottom:'14px' }}>
+            Who's teaching this class?
+          </div>
+
+          {loadingTeachers ? (
+            <div style={{ fontSize:'12px',color:'#aabbc8',padding:'10px 0' }}>Loading teachers…</div>
+          ) : courseTeachers.length===0 ? (
+            <div style={{ fontSize:'11px',color:'#d97706',background:'#fefce8',border:'1px solid #fde68a',borderRadius:'7px',padding:'9px 11px',marginBottom:'6px' }}>
+              No teachers assigned to this course yet. {isFYP?'You can still add it without a supervisor.':'Assign a teacher in Course Assignments first, or add without one.'}
+            </div>
+          ) : (
+            <div style={{ display:'flex',flexDirection:'column',gap:'6px',maxHeight:'220px',overflowY:'auto',marginBottom:'6px' }}>
+              {courseTeachers.map(t=>(
+                <label key={t.id} style={{
+                  display:'flex',alignItems:'center',gap:'9px',padding:'9px 11px',borderRadius:'8px',cursor:'pointer',
+                  border:`1.5px solid ${String(teacherId)===String(t.id)?CELL_NAVY:'#e0e8ed'}`,
+                  background:String(teacherId)===String(t.id)?'#eaf1f5':'white',
+                }}>
+                  <input type="radio" name="assign-teacher" value={t.id}
+                    checked={String(teacherId)===String(t.id)}
+                    onChange={()=>setTeacherId(String(t.id))}
+                    style={{ width:'14px',height:'14px',accentColor:CELL_NAVY,cursor:'pointer' }}/>
+                  <span style={{ fontSize:'12.5px',fontWeight:'600',color:'#1a2e3a' }}>{t.full_name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {isFYP && (
+            <label style={{ display:'flex',alignItems:'center',gap:'9px',padding:'9px 11px',borderRadius:'8px',cursor:'pointer',border:`1.5px solid ${!teacherId?CELL_NAVY:'#e0e8ed'}`,background:!teacherId?'#eaf1f5':'white',marginBottom:'6px' }}>
+              <input type="radio" name="assign-teacher" checked={!teacherId} onChange={()=>setTeacherId('')}
+                style={{ width:'14px',height:'14px',accentColor:CELL_NAVY,cursor:'pointer' }}/>
+              <span style={{ fontSize:'12.5px',fontWeight:'600',color:'#1a2e3a' }}>No supervisor (individual groups)</span>
+            </label>
+          )}
+
+          {/* Actions */}
+          <div style={{ display:'flex',gap:'8px',marginTop:'14px' }}>
+            <button onClick={()=>onConfirm(teacherId, roomId, isShared)} disabled={!canConfirm||loading}
+              style={{ flex:1,background:canConfirm?CELL_NAVY:'#c7cbd6',color:'white',border:'none',padding:'11px',borderRadius:'8px',fontSize:'13px',fontWeight:'700',cursor:canConfirm&&!loading?'pointer':'not-allowed',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px' }}>
+              {loading?'Adding...':'Add Class'}
+            </button>
+            <button onClick={onCancel}
+              style={{ padding:'11px 16px',background:'white',border:'1px solid #dde3e8',color:'#5a7080',borderRadius:'8px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function SearchableSelect({ label, value, onChange, options, placeholder='All' }) {
   const [open,  setOpen]  = React.useState(false);
   const [query, setQuery] = React.useState('');
@@ -385,8 +478,9 @@ function SearchableSelect({ label, value, onChange, options, placeholder='All' }
 }
 
 // ── Timetable Grid — Days vertical, Times horizontal ─────────────────────
-function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, onDelete, showBatch=false }) {
+function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onDropCourse, onSaveCard, onDelete, showBatch=false }) {
   const [dragOver,  setDragOver]  = useState(null);
+  const [dragKind,  setDragKind]  = useState(null); // 'move' | 'course' | 'invalid'
   const [editEntry, setEditEntry] = useState(null);
   const dragRef = useRef(null);
 
@@ -403,10 +497,33 @@ function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, 
   });
 
   const onDragStart=(e,entry)=>{ dragRef.current=entry; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',String(entry.id)); };
-  const onDragOver =(e,day,slot)=>{ e.preventDefault(); e.stopPropagation(); setDragOver(`${day}-${slot}`); };
-  const onDragLeave=(e)=>{ if(!e.currentTarget.contains(e.relatedTarget)) setDragOver(null); };
-  const onDropCell =(e,day,slot)=>{ e.preventDefault(); e.stopPropagation(); setDragOver(null); if(dragRef.current&&onDrop) onDrop(dragRef.current,day,slot); dragRef.current=null; };
-  const onDragEnd  =()=>{ dragRef.current=null; setDragOver(null); };
+  const onDragOver =(e,day,slot)=>{
+    e.preventDefault(); e.stopPropagation();
+    const isCourseDrag = e.dataTransfer.types.includes('application/x-course');
+    const isLabCourse  = e.dataTransfer.types.includes('application/x-course-lab');
+    const invalid = isCourseDrag && isLabCourse && !VALID_LAB_SLOTS.includes(slot);
+    setDragOver(`${day}-${slot}`);
+    setDragKind(invalid ? 'invalid' : isCourseDrag ? 'course' : 'move');
+  };
+  const onDragLeave=(e)=>{ if(!e.currentTarget.contains(e.relatedTarget)){ setDragOver(null); setDragKind(null); } };
+  const onDropCell =(e,day,slot)=>{
+    e.preventDefault(); e.stopPropagation();
+    setDragOver(null);
+    const isCourseDrag = e.dataTransfer.types.includes('application/x-course');
+    if(isCourseDrag){
+      if(dragKind==='invalid'){ setDragKind(null); return; } // lab dropped on a slot that can't fit 3 hours
+      try{
+        const payload = JSON.parse(e.dataTransfer.getData('application/x-course'));
+        if(onDropCourse) onDropCourse(payload, day, slot);
+      }catch(_){ /* ignore malformed payload */ }
+      setDragKind(null);
+      return;
+    }
+    if(dragRef.current&&onDrop) onDrop(dragRef.current,day,slot);
+    dragRef.current=null;
+    setDragKind(null);
+  };
+  const onDragEnd  =()=>{ dragRef.current=null; setDragOver(null); setDragKind(null); };
 
   const DAY_W  = 100; // px for day label column
   const ROW_H  = 100; // px per day row
@@ -471,18 +588,26 @@ function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, 
                     {rowCells.map(({ slot, cells, colSpan })=>{
                       const key   = `${day}-${slot.id}`;
                       const isOver= dragOver===key;
+                      const kind  = isOver ? dragKind : null;
+                      const overBg     = kind==='invalid' ? '#fdeaea' : kind==='course' ? '#e6f9f0' : '#e8f4fd';
+                      const overRing   = kind==='invalid' ? '#ef4444' : kind==='course' ? '#16a34a' : '#4a7a93';
+                      const hintText   = kind==='invalid' ? "Won't fit" : kind==='course' ? 'Drop to add' : 'Drop';
+                      const hintColor  = kind==='invalid' ? '#dc2626' : kind==='course' ? '#16a34a' : '#4a7a93';
                       return (
                         <td key={slot.id} colSpan={colSpan}
                           style={{ padding:'5px',verticalAlign:'top',height:`${ROW_H}px`,border:'1px solid #e8edf0',position:'relative',
-                            background:isOver?'#e8f4fd':'white',transition:'background 0.1s',
-                            boxShadow:isOver?'inset 0 0 0 2px #4a7a93':'none',boxSizing:'border-box' }}
+                            background:isOver?overBg:'white',transition:'background 0.1s',
+                            boxShadow:isOver?`inset 0 0 0 2px ${overRing}`:'none',boxSizing:'border-box' }}
                           onDragOver={canEdit?e=>onDragOver(e,day,slot.id):undefined}
                           onDrop={canEdit?e=>onDropCell(e,day,slot.id):undefined}
                           onDragLeave={canEdit?onDragLeave:undefined}>
 
                           {isOver&&cells.length===0&&(
-                            <div style={{ height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'10px',color:'#4a7a93',fontWeight:'600',gap:'4px' }}>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>Drop
+                            <div style={{ height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'10px',color:hintColor,fontWeight:'600',gap:'4px' }}>
+                              {kind==='invalid'
+                                ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="9"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>}
+                              {hintText}
                             </div>
                           )}
 
@@ -532,7 +657,7 @@ function TimetableGrid({ entries, canEdit, teachers, rooms, onDrop, onSaveCard, 
           <div style={{ display:'flex',alignItems:'center',gap:'5px' }}><div style={{ width:'12px',height:'12px',borderRadius:'3px',background:CELL_NAVY }}/><span style={{ fontSize:'10px',color:'#5a7080' }}>Regular (1 hr)</span></div>
           <div style={{ display:'flex',alignItems:'center',gap:'5px' }}><div style={{ width:'12px',height:'12px',borderRadius:'3px',background:CELL_GREEN }}/><span style={{ fontSize:'10px',color:'#5a7080' }}>Lab (3 hrs)</span></div>
           <div style={{ display:'flex',alignItems:'center',gap:'5px' }}><div style={{ width:'12px',height:'12px',borderRadius:'3px',background:'#1e40af',outline:'1.5px dashed rgba(30,64,175,0.5)',outlineOffset:'-1px' }}/><span style={{ fontSize:'10px',color:'#5a7080' }}>Unsaved drag</span></div>
-          {canEdit&&<span style={{ fontSize:'10px',color:'#7a9aaa',marginLeft:'auto' }}>Click any class to edit teacher/room · Drag to reschedule</span>}
+          {canEdit&&<span style={{ fontSize:'10px',color:'#7a9aaa',marginLeft:'auto' }}>Click any class to edit teacher/room · Drag to reschedule · Drag a course card from the bank to add</span>}
         </div>
       </div>
     </>
@@ -729,6 +854,7 @@ export default function TimetablePage({ canEdit=false }) {
   const [addLoading,    setAddLoading]    = useState(false);
   const [saveLoading,   setSaveLoading]   = useState(false);
   const [pendingMoves,  setPendingMoves]  = useState([]);
+  const [pendingCourseDrop, setPendingCourseDrop] = useState(null); // { payload, day, slot } awaiting teacher assignment
   const [toast,         setToast]         = useState({ msg:'', type:'' });
   const filterBatch = selBatch;
 
@@ -794,6 +920,19 @@ export default function TimetablePage({ canEdit=false }) {
     }
     catch(err){ if(err.response?.data?.conflicts) setConflicts(err.response.data.conflicts); else showToast(err.response?.data?.message||'Error','error'); }
     finally{ setAddLoading(false); }
+  };
+
+  // A course card was dragged out of the Add New Class bank and dropped directly on the grid.
+  // Day/time/room/lab are already known from the drop — ask who's teaching it, then reuse handleAdd.
+  const handleDropCourse=(courseData,day,slot)=>{
+    setPendingCourseDrop({ payload:courseData, day, slot });
+  };
+
+  const confirmCourseDrop=async(teacherId, roomId, isShared)=>{
+    if(!pendingCourseDrop) return;
+    const { payload, day, slot } = pendingCourseDrop;
+    await handleAdd({ ...payload, day, time_slot:slot, teacher_id:teacherId, room_id:roomId, is_shared:isShared||false });
+    setPendingCourseDrop(null);
   };
 
   const handleDrop=async(entry,newDay,newSlot)=>{
@@ -930,24 +1069,44 @@ export default function TimetablePage({ canEdit=false }) {
           <div style={{ padding:'16px 20px' }}>
             <ConflictAlert conflicts={conflicts} onClose={()=>setConflicts([])}/>
 
-            {canEdit&&(
-              <AddClassForm rooms={rooms} selectedBatch={selBatch} semester={selSemester} batches={batches} onAdd={handleAdd} loading={addLoading}/>
+            {pendingCourseDrop&&(
+              <AssignTeacherModal
+                drop={pendingCourseDrop}
+                rooms={rooms}
+                loading={addLoading}
+                onConfirm={confirmCourseDrop}
+                onCancel={()=>setPendingCourseDrop(null)}
+              />
             )}
 
-            {displayEntries.length===0?(
+            {canEdit&&(
+              <AddClassForm selectedBatch={selBatch} semester={selSemester} batches={batches}
+                onBatchChange={(b,s)=>{ setSelBatch(b); setSelSemester(s); }}/>
+            )}
+
+            {!selBatch?(
               <div className="empty-state">
                 <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                <h3>No classes scheduled</h3>
-                <p>{selBatch?`No classes scheduled for this batch in Session ${selSemester||1} yet`:'Select a batch above to view its timetable'}</p>
+                <h3>No timetable to show yet</h3>
+                <p>Select a batch above to view its timetable</p>
               </div>
             ):(
-              <TimetableGrid
-                entries={displayEntries} canEdit={canEdit}
-                teachers={teachers} rooms={rooms}
-                onDrop={canEdit?handleDrop:undefined}
-                onSaveCard={canEdit?handleSaveCard:undefined}
-                onDelete={canEdit?handleDelete:undefined}
-              />
+              <>
+                {displayEntries.length===0&&(
+                  <div style={{ fontSize:'12px',color:'#7a9aaa',background:'#f8fafc',border:'1px solid #e8edf0',borderRadius:'8px',padding:'10px 14px',marginBottom:'12px' }}>
+                    No classes scheduled for this batch in Session {selSemester||1} yet.
+                    {canEdit&&' Click "Course" above and drag a card onto a day/time below to add one.'}
+                  </div>
+                )}
+                <TimetableGrid
+                  entries={displayEntries} canEdit={canEdit}
+                  teachers={teachers} rooms={rooms}
+                  onDrop={canEdit?handleDrop:undefined}
+                  onDropCourse={canEdit?handleDropCourse:undefined}
+                  onSaveCard={canEdit?handleSaveCard:undefined}
+                  onDelete={canEdit?handleDelete:undefined}
+                />
+              </>
             )}
 
             {/* ── Save Bar ── */}
