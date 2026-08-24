@@ -43,6 +43,17 @@ function isGreeting(text) {
   return /^(hi|hello|hey|salam|assalam o alaikum|assalamu alaikum|good morning|good afternoon|good evening)\W*$/i.test(String(text || '').trim());
 }
 
+// Detects when the user wants the system to pick any open slot itself
+// ("on any free slot", "any available time", "anytime", "whenever there's room")
+// rather than naming a specific one.
+function wantsAnyFreeSlot(text) {
+  const t = normalizeText(text);
+  return /\bany\s+(free\s+|available\s+|open\s+)?(slots?|times?|periods?)\b/.test(t)
+    || /\bany\s+(free|available|open)\b/.test(t)
+    || /\banytime\b/.test(t)
+    || /\bwhenever\b/.test(t);
+}
+
 // Deterministic shortcut for the handful of unambiguous, entity-free commands
 // (the quick-prompt buttons and their common phrasings). These carry no
 // entities to resolve, so we can skip the ~5s LLM round-trip and answer
@@ -263,9 +274,9 @@ async function scheduleClass({ userId, batch, subject, teacher, room, day, slot,
   if (conflicts.length) return { conflicts, entry: null };
 
   const inserted = await pool.query(
-    `INSERT INTO timetable (day, time_slot, is_lab, batch_id, subject_id, teacher_id, room_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-    [day, slot, !!isLab, batch.id, subject.id, teacher?.id || null, room?.id || null]
+    `INSERT INTO timetable (day, time_slot, slot_label, is_lab, batch_id, subject_id, teacher_id, room_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+    [day, slot, slotLabel(slot, isLab), !!isLab, batch.id, subject.id, teacher?.id || null, room?.id || null]
   );
   const [entry] = await getAllEntries({}).then(rows => rows.filter(r => r.id === inserted.rows[0].id));
   return { conflicts: [], entry };
@@ -279,8 +290,8 @@ async function rescheduleClass({ entry, day, slot, room }) {
   if (conflicts.length) return { conflicts, entry: null };
 
   await pool.query(
-    `UPDATE timetable SET day = $1, time_slot = $2, room_id = $3 WHERE id = $4`,
-    [day, slot, room?.id || entry.room_id, entry.id]
+    `UPDATE timetable SET day = $1, time_slot = $2, slot_label = $3, room_id = $4 WHERE id = $5`,
+    [day, slot, slotLabel(slot, entry.is_lab), room?.id || entry.room_id, entry.id]
   );
   const [updated] = await getAllEntries({}).then(rows => rows.filter(r => r.id === entry.id));
   return { conflicts: [], entry: updated };
@@ -485,7 +496,7 @@ function notFound(kind, label) {
   // reporting that the name doesn't exist.
   const info = FINDERS[kind] && FINDERS[kind].lastMatchInfo;
   if (info && info.ambiguous && info.candidates && info.candidates.length) {
-    const list = info.candidates.join(', ');
+    const list = [...new Set(info.candidates)].join(', ');
     return response({
       intent: `${kind}_ambiguous`,
       summary: `More than one ${kind} matches "${label}". Did you mean: ${list}? Please be more specific.`,
@@ -646,19 +657,46 @@ async function handleAssistantAgentMessage({ user, message, history }) {
       const subject = parsed.course ? await findSubject(parsed.course) : null;
       const teacher = parsed.teacher ? await findTeacher(parsed.teacher) : null;
       const room = parsed.room ? await findRoom(parsed.room) : null;
+
+      // If the user named something that didn't resolve, tell them exactly what
+      // wasn't found (e.g. "DevOps was not found in the subject database")
+      // instead of vaguely re-asking for "course/subject".
+      if (parsed.batch && !batch) return notFound('batch', parsed.batch);
+      if (parsed.course && !subject) return notFound('subject', parsed.course);
+      if (parsed.teacher && !teacher) return notFound('teacher', parsed.teacher);
+      if (parsed.room && !room) return notFound('room', parsed.room);
+
       const missing = [];
       if (!batch) missing.push('batch');
       if (!subject) missing.push('course/subject');
       if (!day) missing.push('day');
-      if (!slot) missing.push('time slot');
       if (missing.length) {
         return response({ intent: 'schedule_class', summary: `Please provide the missing details to schedule this class: ${missing.join(', ')}.`, missing });
       }
-      const result = await scheduleClass({ userId: user.id, batch, subject, teacher, room, day, slot, isLab });
+
+      // Slot resolution: an explicit slot wins. Otherwise, if the user asked for
+      // "any free slot", auto-pick the first slot where the batch (and teacher/
+      // room, if named) is free. Only when neither applies do we ask for a time.
+      let chosenSlot = slot;
+      if (!chosenSlot && (parsed.any_slot || wantsAnyFreeSlot(text))) {
+        for (const s of SLOTS.map(x => x.id)) {
+          if (isLab && s > 3) continue;
+          const c = await validateSlot({ teacherId: teacher?.id, roomId: room?.id, batchId: batch.id, studentCount: batch.student_count, day, slot: s, isLab });
+          if (!c.length) { chosenSlot = s; break; }
+        }
+        if (!chosenSlot) {
+          return response({ intent: 'schedule_class', summary: `No free slot is available for ${batch.batch_name} on ${day}${isLab ? ' for a lab' : ''}. Try a different day.`, conflicts: [{ type: 'no_free_slot', message: `${batch.batch_name} has no open slot on ${day}.` }] });
+        }
+      }
+      if (!chosenSlot) {
+        return response({ intent: 'schedule_class', summary: 'Please provide the missing details to schedule this class: time slot.', missing: ['time slot'] });
+      }
+
+      const result = await scheduleClass({ userId: user.id, batch, subject, teacher, room, day, slot: chosenSlot, isLab });
       if (result.conflicts.length) {
         return response({ intent: 'schedule_class', summary: 'This class could not be scheduled because of conflicts.', conflicts: result.conflicts });
       }
-      return response({ intent: 'schedule_class', summary: `Scheduled ${subject.name} for ${batch.batch_name} on ${day} at ${slotLabel(slot, isLab)}.`, rows: [formatEntry(result.entry)] });
+      return response({ intent: 'schedule_class', summary: `Scheduled ${subject.name} for ${batch.batch_name} on ${day} at ${slotLabel(chosenSlot, isLab)}.`, rows: [formatEntry(result.entry)] });
     }
 
     case 'reschedule_class': {

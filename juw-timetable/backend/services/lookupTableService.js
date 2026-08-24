@@ -30,6 +30,18 @@ function normalize(value = '') {
   return String(value).toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+// Whole-token containment: does `na` (a normalized alias) appear in `text` (also
+// normalized) as a complete token, not as a fragment inside a bigger word? This
+// stops a short 2-letter code like "DE" (Differential Equations) or "PS"
+// (Pakistan Studies) from matching inside an unrelated word like "devops".
+function tokenMatch(na, text) {
+  if (!na) return false;
+  const escaped = na.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Boundaries are "not adjacent to another alphanumeric char", so hyphenated
+  // codes ("d-20") and multi-word names ("ms. surayya obaid") still match.
+  return new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`).test(text);
+}
+
 // Room/batch codes are written inconsistently — "D-20", "D20", "D 20", "d20".
 // Expand a code into every common separator variant so any of them resolves to
 // the same record. e.g. "D-20" -> ["D-20", "D20", "D 20"].
@@ -179,16 +191,15 @@ function matchEntity(type, text) {
 
   const entries = cache[type];
 
-  // For each entry, find the length of the longest alias contained verbatim in
-  // the text. Blank aliases are skipped: normalize("   ") === "" and every
-  // string ".includes('')" is true, which would make a bad-data record match
-  // every query. bestLen 0 means no alias matched.
+  // For each entry, find the length of the longest alias present in the text as
+  // a whole token. Blank aliases (from bad data like a "   " teacher name) score
+  // 0 and are ignored. bestLen 0 means no alias matched.
   const scored = entries
     .map((e) => {
       let bestLen = 0;
       for (const a of e.aliases) {
         const na = normalize(a);
-        if (na && lower.includes(na) && na.length > bestLen) bestLen = na.length;
+        if (na && na.length > bestLen && tokenMatch(na, lower)) bestLen = na.length;
       }
       return { entry: e, bestLen };
     })

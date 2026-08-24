@@ -45,6 +45,11 @@ time_slot that wasn't stated.
 
 is_lab: true if the message mentions a lab/laboratory/3-hour session.
 
+any_slot: true if the user wants the system to choose any free/available slot
+itself ("on any free slot", "any available time", "anytime", "whenever there's
+room") instead of naming a specific time. When any_slot is true, leave time_slot
+null.
+
 Allowed intents:
 greeting
 view_teacher_schedule
@@ -84,6 +89,7 @@ Return JSON only. No explanation. Use this exact shape:
   "target_room": null,
   "request_id": null,
   "is_lab": false,
+  "any_slot": false,
   "missing": []
 }
 
@@ -112,6 +118,10 @@ JSON:
 Staff: Schedule DLD for BSCS-5A on Monday at 11am in C-62 with Sir Ahmed
 JSON:
 {"intent":"schedule_class","day":"Monday","time_slot":3,"time_text":"11am","room":"C-62","batch":"BSCS-5A","course":"DLD","teacher":"Sir Ahmed","target_day":null,"target_time_slot":null,"target_room":null,"request_id":null,"is_lab":false,"missing":[]}
+
+Staff: Add the DevOps class for BSCS-2023 on any free slot of Friday
+JSON:
+{"intent":"schedule_class","day":"Friday","time_slot":null,"time_text":null,"room":null,"batch":"BSCS-2023","course":"DevOps","teacher":null,"target_day":null,"target_time_slot":null,"target_room":null,"request_id":null,"is_lab":false,"any_slot":true,"missing":[]}
 
 Staff: Cancel the DLD class for BSCS-5A on Monday at 11am
 JSON:
