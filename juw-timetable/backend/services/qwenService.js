@@ -184,7 +184,7 @@ async function askQwen(message) {
   const res = await fetch('https://router.huggingface.co/v1/chat/completions', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
+      Authorization: `Bearer ${process.env.HF_API_KEY || process.env.HUGGINGFACE_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
