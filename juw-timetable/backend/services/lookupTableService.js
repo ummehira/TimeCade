@@ -30,16 +30,34 @@ function normalize(value = '') {
   return String(value).toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+// Honorifics / titles that must never become standalone aliases — otherwise
+// "Ms. Surayya Obaid" would fuzzy/exact-match every teacher whose name starts
+// with "Ms.", making the lookup hopelessly ambiguous.
+const HONORIFICS = new Set([
+  'mr', 'mr.', 'mrs', 'mrs.', 'ms', 'ms.', 'miss', 'sir', 'sir.',
+  'dr', 'dr.', 'prof', 'prof.', 'madam', 'sr', 'sr.',
+]);
+
 // Builds sensible aliases for a teacher's full name: the full name itself,
 // each individual name part (>=3 chars, so "Ali" counts but "Dr" doesn't),
 // and the last name alone, since staff are often referred to informally
-// ("Miss Tehreem", "Sir Ahmed", or just "Tehreem").
+// ("Miss Tehreem", "Sir Ahmed", or just "Tehreem"). Honorifics are stripped so
+// they can't collapse every teacher into one ambiguous bucket, and blank/
+// whitespace-only names (bad data) yield no matchable aliases at all.
 function teacherAliases(fullName, teacherId) {
-  const parts = fullName.trim().split(/\s+/).filter(Boolean);
-  const aliases = new Set([fullName, teacherId].filter(Boolean));
-  parts.forEach((p) => { if (p.length >= 3) aliases.add(p); });
-  if (parts.length) aliases.add(parts[parts.length - 1]);
-  return [...aliases];
+  const full = String(fullName || '').trim();
+  const aliases = new Set([full, teacherId].filter(Boolean));
+  const nameParts = full
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((p) => !HONORIFICS.has(p.toLowerCase()));
+  // The full name minus any honorific ("Mehak Abbas" for "Ms. Mehak Abbas") is
+  // the most specific alias — it lets a fuller query win over a shorter name
+  // that is otherwise a subset ("Ms. Mehak").
+  if (nameParts.length > 1) aliases.add(nameParts.join(' '));
+  nameParts.forEach((p) => { if (p.length >= 3) aliases.add(p); });
+  if (nameParts.length) aliases.add(nameParts[nameParts.length - 1]);
+  return [...aliases].filter((a) => a && a.trim());
 }
 
 async function loadSubjects() {
@@ -147,20 +165,35 @@ function matchEntity(type, text) {
 
   const entries = cache[type];
 
-  const exactMatches = entries.filter((e) =>
-    e.aliases.some((a) => a && lower.includes(normalize(a)))
-  );
-  if (exactMatches.length === 1) {
-    const m = exactMatches[0];
-    return { matched: true, ambiguous: false, id: m.id, canonical: m.canonical, row: m.row };
-  }
-  if (exactMatches.length > 1) {
-    // More than one canonical alias appears in the text — ambiguous rather
-    // than guessing which one the user meant.
+  // For each entry, find the length of the longest alias contained verbatim in
+  // the text. Blank aliases are skipped: normalize("   ") === "" and every
+  // string ".includes('')" is true, which would make a bad-data record match
+  // every query. bestLen 0 means no alias matched.
+  const scored = entries
+    .map((e) => {
+      let bestLen = 0;
+      for (const a of e.aliases) {
+        const na = normalize(a);
+        if (na && lower.includes(na) && na.length > bestLen) bestLen = na.length;
+      }
+      return { entry: e, bestLen };
+    })
+    .filter((s) => s.bestLen > 0);
+
+  if (scored.length) {
+    // Prefer the most specific match: the entry whose longest matched alias is
+    // longest wins ("Hira Sultan" beats a bare "Hira" hit on "Hira Tariq").
+    // Only a genuine tie at the top specificity is treated as ambiguous.
+    const maxLen = Math.max(...scored.map((s) => s.bestLen));
+    const top = scored.filter((s) => s.bestLen === maxLen);
+    if (top.length === 1) {
+      const m = top[0].entry;
+      return { matched: true, ambiguous: false, id: m.id, canonical: m.canonical, row: m.row };
+    }
     return {
       matched: false,
       ambiguous: true,
-      candidates: exactMatches.map((m) => m.canonical),
+      candidates: top.map((s) => s.entry.canonical),
     };
   }
 

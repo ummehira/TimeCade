@@ -450,7 +450,21 @@ async function resolveEntry({ course, batch, teacher, room, day, slot, isLab, ra
   return inferEntry(entries.length ? entries : await getAllEntries({}), rawText);
 }
 
+const FINDERS = { teacher: findTeacher, batch: findBatch, room: findRoom, subject: findSubject };
+
 function notFound(kind, label) {
+  // If the lookup didn't fail outright but was ambiguous (e.g. "Hira" matches
+  // two teachers), guide the user to the actual candidates instead of wrongly
+  // reporting that the name doesn't exist.
+  const info = FINDERS[kind] && FINDERS[kind].lastMatchInfo;
+  if (info && info.ambiguous && info.candidates && info.candidates.length) {
+    const list = info.candidates.join(', ');
+    return response({
+      intent: `${kind}_ambiguous`,
+      summary: `More than one ${kind} matches "${label}". Did you mean: ${list}? Please be more specific.`,
+      missing: [kind],
+    });
+  }
   return response({
     intent: `${kind}_not_found`,
     summary: `${label} was not found in the ${kind} database.`,
@@ -688,6 +702,11 @@ async function handleAssistantAgentMessage({ user, message }) {
         : room
         ? { idFilter: { roomId: room.id }, label: room.room_id }
         : null;
+      // A named-but-unresolved entity means "not found" or "ambiguous", not
+      // "you forgot to name one" — surface the right message via notFound.
+      if (!target && parsed.teacher) return notFound('teacher', parsed.teacher);
+      if (!target && parsed.batch) return notFound('batch', parsed.batch);
+      if (!target && parsed.room) return notFound('room', parsed.room);
       if (!target) return response({ intent: 'free_periods', summary: 'Please mention a room, batch, or teacher to check free periods for.', missing: ['room/batch/teacher'] });
       if (!day) return response({ intent: 'free_periods', summary: 'Please specify a day to check free periods for.', missing: ['day'] });
       const rows = await getFreePeriods({ day, ...target.idFilter });
