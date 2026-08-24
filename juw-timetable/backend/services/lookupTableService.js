@@ -219,6 +219,7 @@ function matchEntity(type, text) {
       matched: false,
       ambiguous: true,
       candidates: top.map((s) => s.entry.canonical),
+      candidateRows: top.map((s) => s.entry.row),
     };
   }
 
@@ -234,6 +235,7 @@ function matchEntity(type, text) {
       matched: false,
       ambiguous: true,
       candidates: results.slice(0, 3).map((r) => r.item.canonical),
+      candidateRows: results.slice(0, 3).map((r) => r.item.row),
     };
   }
 

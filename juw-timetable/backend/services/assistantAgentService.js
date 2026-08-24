@@ -230,6 +230,41 @@ async function findSubject(text) {
   return result.matched ? result.row : null;
 }
 
+// The same course exists once per degree program, distinguished by the subject
+// code prefix: CSC = Computer Science, CSS = Software Engineering, CSD = Data
+// Science. A batch's major_code (CS/SE/DS) tells us which program's copy to use.
+const PROGRAM_TO_SUBJECT_PREFIX = { CS: 'CSC', SE: 'CSS', DS: 'CSD' };
+
+function subjectPrefixForBatch(batchRow) {
+  return PROGRAM_TO_SUBJECT_PREFIX[String(batchRow?.major_code || '').toUpperCase()] || null;
+}
+
+// Resolves a course name to a single subject row. When the name is ambiguous
+// only because the course is duplicated across programs (same name, different
+// code prefix), pick the copy that matches the batch's program. If that can't
+// decide but every candidate is literally the same course name, they are
+// interchangeable for scheduling, so pick the first rather than looping forever
+// asking the user to "be more specific" about identical options.
+async function resolveSubject(courseText, batchRow) {
+  const subject = await findSubject(courseText);
+  if (subject) return subject;
+
+  const info = findSubject.lastMatchInfo;
+  const candidates = (info && info.ambiguous && info.candidateRows) || [];
+  if (!candidates.length) return null;
+
+  const prefix = subjectPrefixForBatch(batchRow);
+  if (prefix) {
+    const byProgram = candidates.filter((c) => String(c.code || '').toUpperCase().replace(/\s+/g, '').startsWith(prefix));
+    if (byProgram.length) return byProgram[0];
+  }
+
+  const distinctNames = new Set(candidates.map((c) => normalizeText(c.name)));
+  if (distinctNames.size === 1) return candidates[0];
+
+  return null; // genuinely different courses — leave it ambiguous for the caller
+}
+
 async function getSlotOccupants({ day, slot, isLab = false, teacherId, roomId, batchId, excludeId }) {
   const params = [day];
   let where = 'WHERE t.day = $1';
@@ -654,7 +689,10 @@ async function handleAssistantAgentMessage({ user, message, history }) {
 
     case 'schedule_class': {
       const batch = parsed.batch ? await findBatch(parsed.batch) : null;
-      const subject = parsed.course ? await findSubject(parsed.course) : null;
+      // Resolve the course against the batch's program so a course that exists
+      // once per program (e.g. "Database Systems") picks the right copy instead
+      // of looping on "did you mean Database Systems?".
+      const subject = parsed.course ? await resolveSubject(parsed.course, batch) : null;
       const teacher = parsed.teacher ? await findTeacher(parsed.teacher) : null;
       const room = parsed.room ? await findRoom(parsed.room) : null;
 
