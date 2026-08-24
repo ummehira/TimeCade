@@ -9,6 +9,7 @@ router.post('/message', authenticate, authorize('office_assistant'), async (req,
     const result = await handleAssistantAgentMessage({
       user: req.user,
       message: req.body.message,
+      history: req.body.history,
     });
 
     res.json(result);

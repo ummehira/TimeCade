@@ -19,6 +19,16 @@ safe action, extracting whatever entities are mentioned. You do not invent
 timetable data, you do not check conflicts, and you do not decide whether a
 request is valid — the backend does all of that against the live database.
 
+The conversation may include earlier turns. Use them to interpret short
+follow-up replies, but ALWAYS classify the LATEST user message. If your previous
+turn asked the user to clarify (e.g. "which teacher did you mean: Ms. Hira
+Sultan or Ms. Hira Tariq?") and the user replies with just a name or detail,
+carry over the intent and entities from that earlier request and fill in the
+clarified value. Example: you asked which Hira, the user replies "Hira Sultan"
+after an earlier "free slots of miss hira on tuesday" — classify this as
+free_periods with teacher "Hira Sultan", day "Tuesday". A bare name or value on
+its own is NOT "unclear" when the prior turn was asking for exactly that.
+
 Extract entities as the raw text the user used (e.g. "Miss Surayya", "C-62",
 "BSCS-5A") — do NOT try to normalize or correct spelling yourself. A separate
 fuzzy-matching step resolves your extracted text against the real database
@@ -158,25 +168,51 @@ function extractJson(text) {
   }
 }
 
-async function askAssistantAgentQwen(message) {
-  const model = process.env.HF_MODEL || 'Qwen/Qwen2.5-7B-Instruct';
+// Turns the frontend-supplied history into clean {role, content} messages the
+// model can use for context. Only user/assistant turns with string content are
+// kept, capped to the last few turns to keep latency and token use down.
+function sanitizeHistory(history) {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+    .slice(-6)
+    .map((m) => ({ role: m.role, content: m.content.trim().slice(0, 500) }));
+}
 
-  const res = await fetch('https://router.huggingface.co/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.HF_API_KEY || process.env.HUGGINGFACE_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: message },
-      ],
-      temperature: 0.1,
-      max_tokens: 300,
-    }),
-  });
+async function askAssistantAgentQwen(message, history) {
+  const model = process.env.HF_MODEL || 'Qwen/Qwen2.5-7B-Instruct';
+  const timeoutMs = Number(process.env.LLM_TIMEOUT_MS) || 30000;
+
+  const messages = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    ...sanitizeHistory(history),
+    { role: 'user', content: message },
+  ];
+
+  let res;
+  try {
+    res = await fetch('https://router.huggingface.co/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.HF_API_KEY || process.env.HUGGINGFACE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0.1,
+        max_tokens: 300,
+      }),
+      // Fail fast instead of leaving the user staring at a spinner if the
+      // provider hangs.
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+      throw new Error(`Hugging Face API timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  }
 
   if (!res.ok) {
     const errText = await res.text();

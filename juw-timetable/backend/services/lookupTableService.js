@@ -30,6 +30,20 @@ function normalize(value = '') {
   return String(value).toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+// Room/batch codes are written inconsistently — "D-20", "D20", "D 20", "d20".
+// Expand a code into every common separator variant so any of them resolves to
+// the same record. e.g. "D-20" -> ["D-20", "D20", "D 20"].
+function codeVariants(code) {
+  const c = String(code || '').trim();
+  if (!c) return [];
+  return [...new Set([
+    c,
+    c.replace(/[-\s]+/g, ''),   // D20
+    c.replace(/[-\s]+/g, ' '),  // D 20
+    c.replace(/[-\s]+/g, '-'),  // D-20
+  ])].filter(Boolean);
+}
+
 // Honorifics / titles that must never become standalone aliases — otherwise
 // "Ms. Surayya Obaid" would fuzzy/exact-match every teacher whose name starts
 // with "Ms.", making the lookup hopelessly ambiguous.
@@ -104,7 +118,7 @@ async function loadRooms() {
     id: r.id,
     canonical: r.room_id,
     row: r,
-    aliases: [r.room_id, r.room_name].filter(Boolean),
+    aliases: [...new Set([...codeVariants(r.room_id), r.room_name].filter(Boolean))],
   }));
 }
 

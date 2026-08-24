@@ -13,7 +13,7 @@ const quickPrompts = [
 
 function ResultTable({ rows }) {
   if (!rows?.length) return null;
-  const columns = ['course', 'batch', 'teacher', 'classroom', 'day', 'time', 'availabilityStatus', 'conflictStatus'];
+  const allColumns = ['course', 'batch', 'teacher', 'classroom', 'day', 'time', 'availabilityStatus', 'conflictStatus'];
   const labels = {
     course: 'Course',
     batch: 'Batch',
@@ -24,9 +24,16 @@ function ResultTable({ rows }) {
     availabilityStatus: 'Availability',
     conflictStatus: 'Conflict',
   };
+  // Only render columns that actually carry data for this result set, so a
+  // free-periods lookup doesn't show empty Course/Batch/Teacher/Classroom
+  // columns full of dashes.
+  const hasValue = (v) => v !== null && v !== undefined && String(v).trim() !== '' && String(v).trim() !== '-';
+  const columns = allColumns.filter(col => rows.some(row => hasValue(row[col])));
+  if (!columns.length) return null;
+  const minWidth = Math.max(320, columns.length * 90);
   return (
     <div style={{ overflowX: 'auto', marginTop: 12 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720, fontSize: 12 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth, fontSize: 12 }}>
         <thead>
           <tr style={{ background: '#2d4a5a', color: 'white' }}>
             {columns.map(col => (
@@ -257,10 +264,19 @@ export default function AssistantAgentPage() {
     if (!prompt || loading) return;
     setError('');
     setInput('');
+    // Build a short rolling history (last few turns) so the agent can resolve
+    // follow-ups like "ms hira sultan" after it asked which Hira was meant.
+    const history = messages
+      .filter(m => (m.role === 'user' && m.text) || (m.role === 'agent' && m.data?.summary))
+      .slice(-6)
+      .map(m => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: m.role === 'user' ? m.text : m.data.summary,
+      }));
     setMessages(prev => [...prev, { role: 'user', text: prompt }]);
     setLoading(true);
     try {
-      const res = await api.post('/assistant-agent/message', { message: prompt });
+      const res = await api.post('/assistant-agent/message', { message: prompt, history });
       setMessages(prev => [...prev, { role: 'agent', data: res.data }]);
     } catch (err) {
       setError(err.response?.data?.message || 'The agent could not process this request.');

@@ -43,6 +43,33 @@ function isGreeting(text) {
   return /^(hi|hello|hey|salam|assalam o alaikum|assalamu alaikum|good morning|good afternoon|good evening)\W*$/i.test(String(text || '').trim());
 }
 
+// Deterministic shortcut for the handful of unambiguous, entity-free commands
+// (the quick-prompt buttons and their common phrasings). These carry no
+// entities to resolve, so we can skip the ~5s LLM round-trip and answer
+// instantly. Returns a parsed-shaped object, or null to fall through to the LLM.
+function fastIntent(text) {
+  const t = normalizeText(text);
+  if (/\bpending\s+requests?\b/.test(t) || /\brequests?\s+(that are\s+)?pending\b/.test(t)) {
+    return { intent: 'view_pending_requests' };
+  }
+  if (/\bworkload\b/.test(t) && /\breports?\b/.test(t)) {
+    return { intent: 'teacher_workload_report' };
+  }
+  if (/\b(utilization|utilisation)\b/.test(t) || /how\s+busy\s+.*\brooms?\b/.test(t)) {
+    return { intent: 'room_utilization_report' };
+  }
+  if (/\btoday'?s?\s+(timetable|schedule|classes)\b/.test(t) || /\b(timetable|schedule)\s+for\s+today\b/.test(t)) {
+    return { intent: 'view_day', day: 'today' };
+  }
+  if (/\btomorrow'?s?\s+(timetable|schedule|classes)\b/.test(t) || /\b(timetable|schedule)\s+for\s+tomorrow\b/.test(t)) {
+    return { intent: 'view_day', day: 'tomorrow' };
+  }
+  if (/\b(weekly|full\s+week|whole\s+week)\s+(timetable|schedule)\b/.test(t) || /\bweekly\s+timetable\b/.test(t)) {
+    return { intent: 'view_weekly' };
+  }
+  return null;
+}
+
 function formatEntry(row) {
   return {
     id: row.id,
@@ -476,7 +503,7 @@ function response({ intent, summary, rows = [], conflicts = [], alternatives = [
   return { agent: 'Assistant AI Agent', intent, summary, rows, conflicts, alternatives, missing, request, report };
 }
 
-async function handleAssistantAgentMessage({ user, message }) {
+async function handleAssistantAgentMessage({ user, message, history }) {
   const text = String(message || '').trim();
   if (!text) return response({ intent: 'missing_message', summary: 'Please enter a scheduling or admin request.', missing: ['message'] });
 
@@ -484,12 +511,14 @@ async function handleAssistantAgentMessage({ user, message }) {
     return response({ intent: 'greeting', summary: 'Hello! I can schedule, reschedule, or cancel classes, assign teachers, check availability and conflicts, review pending requests, or run workload/utilization reports. How can I help?' });
   }
 
-  let parsed;
-  try {
-    parsed = await askAssistantAgentQwen(text);
-  } catch (err) {
-    console.error('Assistant Agent NLU error:', err);
-    return response({ intent: 'nlu_error', summary: 'The AI classification service is temporarily unavailable. Please try again in a moment.' });
+  let parsed = fastIntent(text);
+  if (!parsed) {
+    try {
+      parsed = await askAssistantAgentQwen(text, history);
+    } catch (err) {
+      console.error('Assistant Agent NLU error:', err);
+      return response({ intent: 'nlu_error', summary: 'The AI classification service is temporarily unavailable. Please try again in a moment.' });
+    }
   }
 
   const day = parsed.day ? getDayFromText(parsed.day) : null;
