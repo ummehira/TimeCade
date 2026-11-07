@@ -1,9 +1,22 @@
 // backend/services/conflictService.js
 const pool = require('../config/db');
 
-async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day, time_slot, exclude_id = null, is_shared = false }) {
+// Each semester has its own, completely separate timetable. Teachers, rooms and
+// batches are only compared against classes of the SAME semester.
+async function resolveSemester(semester, exclude_id) {
+  if (semester !== undefined && semester !== null && semester !== '') return parseInt(semester);
+  // Editing/moving an existing entry: use that entry's own semester
+  if (exclude_id) {
+    const r = await pool.query('SELECT semester FROM timetable WHERE id=$1', [parseInt(exclude_id)]);
+    if (r.rows.length && r.rows[0].semester != null) return parseInt(r.rows[0].semester);
+  }
+  return 1; // same default createEntry uses
+}
+
+async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day, time_slot, semester, exclude_id = null, is_shared = false }) {
   const conflicts = [];
   if (!day || !time_slot) return conflicts;
+  const sem = await resolveSemester(semester, exclude_id);
   const excl = exclude_id ? `AND t.id != ${parseInt(exclude_id)}` : '';
 
   // ── SHARED LECTURE MODE ──────────────────────────────────────────────────
@@ -18,8 +31,8 @@ async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day,
       `SELECT s.name AS subject
        FROM timetable t
        JOIN subjects s ON t.subject_id = s.id
-       WHERE t.batch_id = $1 AND t.day = $2 AND t.time_slot = $3 ${excl}`,
-      [batch_id, day, time_slot]
+       WHERE t.batch_id = $1 AND t.day = $2 AND t.time_slot = $3 AND COALESCE(t.semester,1) = $4 ${excl}`,
+      [batch_id, day, time_slot, sem]
     );
     if (batchRes.rows.length > 0) {
       conflicts.push({
@@ -37,9 +50,9 @@ async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day,
          JOIN subjects s  ON t.subject_id = s.id
          JOIN rooms r     ON t.room_id    = r.id
          LEFT JOIN teachers te ON t.teacher_id = te.id
-         WHERE t.room_id = $1 AND t.day = $2 AND t.time_slot = $3 ${excl}
+         WHERE t.room_id = $1 AND t.day = $2 AND t.time_slot = $3 AND COALESCE(t.semester,1) = $4 ${excl}
          LIMIT 1`,
-        [room_id, day, time_slot]
+        [room_id, day, time_slot, sem]
       );
       if (roomCheck.rows.length > 0) {
         const existing = roomCheck.rows[0];
@@ -60,9 +73,9 @@ async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day,
          FROM timetable t
          JOIN subjects s ON t.subject_id = s.id
          JOIN rooms r    ON t.room_id    = r.id
-         WHERE t.teacher_id = $1 AND t.day = $2 AND t.time_slot = $3 ${excl}
+         WHERE t.teacher_id = $1 AND t.day = $2 AND t.time_slot = $3 AND COALESCE(t.semester,1) = $4 ${excl}
          LIMIT 1`,
-        [teacher_id, day, time_slot]
+        [teacher_id, day, time_slot, sem]
       );
       if (teacherCheck.rows.length > 0) {
         const existing = teacherCheck.rows[0];
@@ -88,8 +101,8 @@ async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day,
        FROM timetable t
        JOIN batches b  ON t.batch_id   = b.id
        JOIN subjects s ON t.subject_id = s.id
-       WHERE t.teacher_id = $1 AND t.day = $2 AND t.time_slot = $3 ${excl}`,
-      [teacher_id, day, time_slot]
+       WHERE t.teacher_id = $1 AND t.day = $2 AND t.time_slot = $3 AND COALESCE(t.semester,1) = $4 ${excl}`,
+      [teacher_id, day, time_slot, sem]
     );
     if (teacherRes.rows.length > 0) {
       const r = teacherRes.rows[0];
@@ -108,8 +121,8 @@ async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day,
        JOIN batches b  ON t.batch_id   = b.id
        JOIN subjects s ON t.subject_id = s.id
        JOIN rooms r    ON t.room_id    = r.id
-       WHERE t.room_id = $1 AND t.day = $2 AND t.time_slot = $3 ${excl}`,
-      [room_id, day, time_slot]
+       WHERE t.room_id = $1 AND t.day = $2 AND t.time_slot = $3 AND COALESCE(t.semester,1) = $4 ${excl}`,
+      [room_id, day, time_slot, sem]
     );
     if (roomRes.rows.length > 0) {
       const r = roomRes.rows[0];
@@ -125,8 +138,8 @@ async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day,
     `SELECT s.name AS subject
      FROM timetable t
      JOIN subjects s ON t.subject_id = s.id
-     WHERE t.batch_id = $1 AND t.day = $2 AND t.time_slot = $3 ${excl}`,
-    [batch_id, day, time_slot]
+     WHERE t.batch_id = $1 AND t.day = $2 AND t.time_slot = $3 AND COALESCE(t.semester,1) = $4 ${excl}`,
+    [batch_id, day, time_slot, sem]
   );
   if (batchRes.rows.length > 0) {
     const r = batchRes.rows[0];

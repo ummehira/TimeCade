@@ -145,6 +145,7 @@ async function enrichRequestData(data) {
 const createEntry = async (req, res) => {
   try {
     const { batch_id, subject_id, teacher_id, room_id, day, time_slot, is_lab, semester, is_shared } = req.body;
+    console.log('[createEntry v2] body.semester =', semester); // TEMP DEBUG
     // Check if this is an FYP course — teacher is optional for FYP
     const subjectRes = await pool.query('SELECT has_lab, name, code FROM subjects WHERE id=$1', [subject_id]);
     const isFYP = /fyp|final.year.project/i.test((subjectRes.rows[0]?.name||'')+' '+(subjectRes.rows[0]?.code||''));
@@ -164,7 +165,7 @@ const createEntry = async (req, res) => {
     }
 
     // Pass subject_id so conflictService can allow shared lectures (same subject, same room, same slot)
-    const conflicts = await detectConflicts({ batch_id, subject_id, teacher_id: teacher_id||null, room_id, day, time_slot, is_shared: is_shared||false });
+    const conflicts = await detectConflicts({ batch_id, subject_id, teacher_id: teacher_id||null, room_id, day, time_slot, semester: semester||1, is_shared: is_shared||false });
     if (conflicts.length) return res.status(409).json({ message: 'Conflict detected', conflicts });
 
     const slot_label = getSlotLabel(time_slot, finalIsLab);
@@ -201,11 +202,11 @@ const createEntry = async (req, res) => {
 const updateEntry = async (req, res) => {
   try {
     const { id } = req.params;
-    const { batch_id, subject_id, teacher_id, room_id, day, time_slot, is_lab } = req.body;
+    const { batch_id, subject_id, teacher_id, room_id, day, time_slot, is_lab, semester } = req.body;
 
     const finalTeacherId = teacher_id || null;
     // Pass subject_id so conflictService can allow shared lectures (same subject, same room, same slot)
-    const conflicts = await detectConflicts({ batch_id, subject_id, teacher_id: finalTeacherId, room_id, day, time_slot, exclude_id: id });
+    const conflicts = await detectConflicts({ batch_id, subject_id, teacher_id: finalTeacherId, room_id, day, time_slot, semester, exclude_id: id });
     if (conflicts.length) return res.status(409).json({ message: 'Conflict detected', conflicts });
 
     const slot_label = getSlotLabel(time_slot, is_lab);
@@ -239,9 +240,9 @@ const deleteEntry = async (req, res) => {
 // POST /api/timetable/check-conflicts
 const checkConflicts = async (req, res) => {
   try {
-    const { batch_id, subject_id, teacher_id, room_id, day, time_slot, exclude_id, is_shared } = req.body;
+    const { batch_id, subject_id, teacher_id, room_id, day, time_slot, semester, exclude_id, is_shared } = req.body;
     // Pass subject_id so conflictService can allow shared lectures (same subject, same room, same slot)
-    const conflicts = await detectConflicts({ batch_id, subject_id, teacher_id, room_id, day, time_slot, exclude_id, is_shared: is_shared||false });
+    const conflicts = await detectConflicts({ batch_id, subject_id, teacher_id, room_id, day, time_slot, semester, exclude_id, is_shared: is_shared||false });
     res.json({ hasConflict: conflicts.length > 0, conflicts });
   } catch (err) {
     res.status(500).json({ message: 'Server error.' });
