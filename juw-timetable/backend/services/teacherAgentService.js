@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { getActiveSemester } = require('./settingsService');
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const SLOTS = [
@@ -197,6 +198,8 @@ async function getLoggedInTeacher(userId) {
 async function getTeacherEntries(teacherId, filters = {}) {
   const params = [teacherId];
   let where = 'WHERE t.teacher_id = $1';
+  params.push(await getActiveSemester());
+  where += ` AND COALESCE(t.semester,1) = $${params.length}`;
   if (filters.day) {
     params.push(filters.day);
     where += ` AND t.day = $${params.length}`;
@@ -255,9 +258,9 @@ async function findCourse(text, teacherId) {
     `SELECT DISTINCT s.id, s.name, s.short_name, s.code
      FROM timetable t
      JOIN subjects s ON t.subject_id = s.id
-     WHERE t.teacher_id = $1
+     WHERE t.teacher_id = $1 AND COALESCE(t.semester,1) = $2
      ORDER BY s.name`,
-    [teacherId]
+    [teacherId, await getActiveSemester()]
   )).rows;
   const lower = normalizeText(text);
   return courses.find(s => [s.name, s.short_name, s.code].filter(Boolean).some(v => lower.includes(normalizeText(v)))) || null;
@@ -278,6 +281,8 @@ async function findTargetRoom(text) {
 async function getSlotOccupants({ day, slot, isLab = false, teacherId, roomId, batchId, excludeId }) {
   const params = [day];
   let where = 'WHERE t.day = $1';
+  params.push(await getActiveSemester());
+  where += ` AND COALESCE(t.semester,1) = $${params.length}`;
   if (excludeId) {
     params.push(excludeId);
     where += ` AND t.id <> $${params.length}`;

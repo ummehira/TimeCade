@@ -3,6 +3,7 @@ const express = require('express');
 const router  = express.Router();
 const pool    = require('../config/db');
 const { authenticate, authorize } = require('../middleware/authMiddleware');
+const { getActiveSemester } = require('../services/settingsService');
 
 const canEdit = authorize('office_assistant');
 
@@ -79,11 +80,12 @@ router.get('/teachers', authenticate, async (req, res) => {
               ARRAY(
                 SELECT DISTINCT s.name FROM timetable t
                 JOIN subjects s ON t.subject_id = s.id
-                WHERE t.teacher_id = te.id
+                WHERE t.teacher_id = te.id AND COALESCE(t.semester,1) = $1
               ) AS subjects
        FROM teachers te
        LEFT JOIN departments d ON te.department_id = d.id
-       ORDER BY te.full_name`
+       ORDER BY te.full_name`,
+      [await getActiveSemester()]
     );
     res.json(r.rows);
   } catch (err) { res.status(500).json({ message: 'Server error.' }); }
@@ -333,12 +335,12 @@ router.get('/room-schedule', authenticate, async (req, res) => {
        JOIN subjects s  ON t.subject_id = s.id
        LEFT JOIN teachers te ON t.teacher_id = te.id
        JOIN rooms    r  ON t.room_id    = r.id
-       WHERE r.id = $1
+       WHERE r.id = $1 AND COALESCE(t.semester,1) = $2
        ORDER BY CASE t.day
          WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3
          WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 WHEN 'Saturday' THEN 6
        END, t.time_slot::int`,
-      [room_id]
+      [room_id, req.query.semester ? parseInt(req.query.semester) : await getActiveSemester()]
     );
     res.json(result.rows);
   } catch (err) {
@@ -374,12 +376,12 @@ router.get('/teacher-schedule', authenticate, async (req, res) => {
        JOIN subjects s  ON t.subject_id = s.id
        JOIN teachers te ON t.teacher_id = te.id
        LEFT JOIN rooms r ON t.room_id   = r.id
-       WHERE te.id = $1
+       WHERE te.id = $1 AND COALESCE(t.semester,1) = $2
        ORDER BY CASE t.day
          WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3
          WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 WHEN 'Saturday' THEN 6
        END, t.time_slot::int`,
-      [teacher_id]
+      [teacher_id, req.query.semester ? parseInt(req.query.semester) : await getActiveSemester()]
     );
     res.json(result.rows);
   } catch (err) {
@@ -396,7 +398,8 @@ router.get('/batch-timetable', authenticate, async (req, res) => {
 
     let whereClause = 'WHERE t.batch_id = $1';
     const params = [batch_id];
-    if (semester) { params.push(parseInt(semester)); whereClause += ` AND t.semester = $${params.length}`; }
+    const sem = semester ? parseInt(semester) : await getActiveSemester();
+    params.push(sem); whereClause += ` AND COALESCE(t.semester,1) = $${params.length}`;
 
     const result = await pool.query(
       `SELECT t.id, t.day, t.time_slot::int AS time_slot, t.is_lab, t.semester,
@@ -441,7 +444,7 @@ router.get('/stats', authenticate, async (req, res) => {
       pool.query('SELECT COUNT(*) FROM batches'),
       pool.query('SELECT COUNT(*) FROM teachers'),
       pool.query('SELECT COUNT(*) FROM rooms'),
-      pool.query('SELECT COUNT(*) FROM timetable'),
+      pool.query('SELECT COUNT(*) FROM timetable WHERE COALESCE(semester,1) = $1', [await getActiveSemester()]),
     ]);
     res.json({
       totalBatches:  parseInt(batches.rows[0].count),

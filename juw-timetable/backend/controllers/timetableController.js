@@ -1,6 +1,7 @@
 // backend/controllers/timetableController.js
 const pool = require('../config/db');
 const { detectConflicts }        = require('../services/conflictService');
+const { getActiveSemester }      = require('../services/settingsService');
 const { notifyTimetableChange }  = require('../services/notificationService');
 
 // ── Slot definitions ──────────────────────────────────────────────────────
@@ -56,8 +57,14 @@ const getTimetable = async (req, res) => {
     } else {
       if (batch_id)   { params.push(batch_id);   where += ` AND t.batch_id=$${params.length}`; }
       if (teacher_id) { params.push(teacher_id); where += ` AND t.teacher_id=$${params.length}`; }
-      if (semester)   { params.push(semester);   where += ` AND t.semester=$${params.length}`; }
+    }
 
+    // Every role sees ONE semester at a time: the one asked for, otherwise the globally active one.
+    // (pass ?semester=all to get everything)
+    if (semester !== 'all') {
+      const sem = semester ? parseInt(semester) : await getActiveSemester();
+      params.push(sem);
+      where += ` AND COALESCE(t.semester,1)=$${params.length}`;
     }
 
     const result = await pool.query(
@@ -145,7 +152,7 @@ async function enrichRequestData(data) {
 const createEntry = async (req, res) => {
   try {
     const { batch_id, subject_id, teacher_id, room_id, day, time_slot, is_lab, semester, is_shared } = req.body;
-    console.log('[createEntry v2] body.semester =', semester); // TEMP DEBUG
+    const activeSem = semester ? parseInt(semester) : await getActiveSemester();
     // Check if this is an FYP course — teacher is optional for FYP
     const subjectRes = await pool.query('SELECT has_lab, name, code FROM subjects WHERE id=$1', [subject_id]);
     const isFYP = /fyp|final.year.project/i.test((subjectRes.rows[0]?.name||'')+' '+(subjectRes.rows[0]?.code||''));
@@ -165,7 +172,7 @@ const createEntry = async (req, res) => {
     }
 
     // Pass subject_id so conflictService can allow shared lectures (same subject, same room, same slot)
-    const conflicts = await detectConflicts({ batch_id, subject_id, teacher_id: teacher_id||null, room_id, day, time_slot, semester: semester||1, is_shared: is_shared||false });
+    const conflicts = await detectConflicts({ batch_id, subject_id, teacher_id: teacher_id||null, room_id, day, time_slot, semester: activeSem, is_shared: is_shared||false });
     if (conflicts.length) return res.status(409).json({ message: 'Conflict detected', conflicts });
 
     const slot_label = getSlotLabel(time_slot, finalIsLab);
@@ -174,7 +181,7 @@ const createEntry = async (req, res) => {
     const result = await pool.query(
       `INSERT INTO timetable (batch_id,subject_id,teacher_id,room_id,day,time_slot,slot_label,is_lab,semester)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [batch_id, subject_id, finalTeacherId, room_id||null, day, time_slot, slot_label, finalIsLab, semester || 1]
+      [batch_id, subject_id, finalTeacherId, room_id||null, day, time_slot, slot_label, finalIsLab, activeSem]
     );
     const created = result.rows[0];
     // Notify affected teacher and students

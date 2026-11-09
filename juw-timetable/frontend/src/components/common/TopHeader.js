@@ -3,6 +3,7 @@ import React from 'react';
 import { Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import NotificationBell from './NotificationBell';
+import SemesterSwitcher from './SemesterSwitcher';
 
 const ROLE_LABELS = {
   office_assistant: 'OFFICE ASSISTANT',
@@ -44,6 +45,7 @@ export default function TopHeader({ title, icon: Icon, onMenuClick }) {
       </div>
 
       <div style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
+        <SemesterSwitcher/>
         {showBell && <NotificationBell dark={false}/>}
         <div style={{ textAlign:'right', display:'none' }} className="hide-mobile">
           <div style={{ fontSize:'13px', fontWeight:'600', color:'#1a2e3a' }}>{displayName}</div>

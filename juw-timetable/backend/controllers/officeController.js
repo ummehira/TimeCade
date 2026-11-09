@@ -4,6 +4,7 @@
 // ============================================
 const bcrypt = require('bcryptjs');
 const pool   = require('../config/db');
+const { getActiveSemester } = require('../services/settingsService');
 
 // ── Dashboard Stats ──────────────────────────
 const getDashboardStats = async (req, res) => {
@@ -12,7 +13,7 @@ const getDashboardStats = async (req, res) => {
       pool.query('SELECT COUNT(*) FROM batches WHERE is_active=true'),
       pool.query('SELECT COUNT(*) FROM teachers WHERE is_active=true'),
       pool.query('SELECT COUNT(*) FROM rooms WHERE is_available=true'),
-      pool.query('SELECT COUNT(*) FROM timetable')
+      pool.query('SELECT COUNT(*) FROM timetable WHERE COALESCE(semester,1) = $1', [await getActiveSemester()])
     ]);
     res.json({
       totalBatches:  parseInt(b.rows[0].count),

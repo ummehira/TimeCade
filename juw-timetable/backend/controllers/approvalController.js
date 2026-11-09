@@ -1,5 +1,6 @@
 // backend/controllers/approvalController.js
 const pool = require('../config/db');
+const { getActiveSemester } = require('../services/settingsService');
 
 const SLOT_LABELS = {
   1:'9:00 - 10:00', 2:'10:00 - 11:00', 3:'11:00 - 12:00',
@@ -169,10 +170,11 @@ const approveRequest = async (req, res) => {
       if (request.request_type === 'create') {
         const slotLabel = getSlotLabel(data.time_slot, data.is_lab);
         await client.query(
-          `INSERT INTO timetable (batch_id,subject_id,teacher_id,room_id,day,time_slot,slot_label,is_lab)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          `INSERT INTO timetable (batch_id,subject_id,teacher_id,room_id,day,time_slot,slot_label,is_lab,semester)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
           [data.batch_id, data.subject_id, data.teacher_id, data.room_id,
-           data.day, data.time_slot, slotLabel, data.is_lab || false]
+           data.day, data.time_slot, slotLabel, data.is_lab || false,
+           data.semester ? parseInt(data.semester) : await getActiveSemester()]
         );
       } else if (request.request_type === 'update') {
         const entryId = data.timetable_entry_id || request.entity_id;

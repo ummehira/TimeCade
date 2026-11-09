@@ -2,6 +2,7 @@
   import React, { useState, useEffect } from 'react';
   import { GraduationCap, Users, BookOpen, Building2, Clock, Plus, Pencil, Check, X, Trash2, Search } from 'lucide-react';
   import api from '../../utils/api';
+  import { useSemester, SEMESTER_OPTIONS } from '../../context/SemesterContext';
   import { useResponsive } from '../../hooks/useResponsive';
 
   const fl = { fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px',color:'#5a7080',display:'block',marginBottom:'5px' };
@@ -191,10 +192,12 @@
     const [editForm,    setEditForm]    = useState({});
     const [editCourses, setEditCourses] = useState([]);
     // Semester-aware selection: { [semester]: [subject_id, ...] }
-    const SEMS = [1,2];  // matches the Session 1 / Session 2 options on the Timetable page
+    const SEMS = SEMESTER_OPTIONS;   // Session 1 / Session 2
+    const { semester: activeSem } = useSemester();   // global active semester = default choice
     const [editSelMap,  setEditSelMap]  = useState({});
-    const [editSem,     setEditSem]     = useState(1);
-    const [addSem,      setAddSem]      = useState(1);
+    const [editSem,     setEditSem]     = useState(activeSem);
+    const [addSem,      setAddSem]      = useState(activeSem);
+    useEffect(()=>{ setAddSem(activeSem); setEditSem(activeSem); },[activeSem]);
     const editSel = editSelMap[editSem] || [];
     const setEditSel = upd => setEditSelMap(m => ({ ...m, [editSem]: typeof upd==='function' ? upd(m[editSem]||[]) : upd }));
     const editCoursesSem = editCourses.filter(c => Number(c.semester)===editSem);
@@ -272,7 +275,7 @@
       try{
         const r=await api.get('/assignments/batch-subjects',{params:{batch_id:b.id}});
         setEditCourses(r.data);
-        setEditSem(1);
+        setEditSem(activeSem);
         const map = {};
         r.data.forEach(x=>{ const sem=Number(x.semester); (map[sem]=map[sem]||[]).push(x.subject_id); });
         setEditSelMap(map);

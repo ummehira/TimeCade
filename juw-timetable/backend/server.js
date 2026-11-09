@@ -8,6 +8,7 @@ require('dotenv').config();
 const app = express();
 
 const lookupTableService = require('./services/lookupTableService');
+const { ensureSettingsTable } = require('./services/settingsService');
 
 // ── Middleware ──────────────────────────────
 app.use(cors({
@@ -32,6 +33,7 @@ app.use('/api/notifications',require('./routes/notificationRoutes'));
 app.use('/api/assignments', require('./routes/assignmentRoutes'));
 app.use('/api/teacher-agent', require('./routes/teacherAgentRoutes'));
 app.use('/api/assistant-agent', require('./routes/assistantAgentRoutes'));
+app.use('/api/settings',   require('./routes/settingsRoutes'));
 
 // ── Health Check ────────────────────────────
 app.get('/api/health', (req, res) => {
@@ -55,6 +57,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 
 async function startServer() {
+  await ensureSettingsTable().catch((e) => console.error('settings table:', e.message));
   await lookupTableService.init();
   console.log('Lookup table ready');
 

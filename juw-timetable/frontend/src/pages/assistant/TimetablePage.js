@@ -1,6 +1,7 @@
 // frontend/src/pages/assistant/TimetablePage.js
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../utils/api';
+import { useSemester, semesterLabel } from '../../context/SemesterContext';
 import SearchSelect from '../../components/common/SearchSelect';
 import ExportButtons from '../../components/common/ExportButtons';
 
@@ -48,14 +49,13 @@ function ConflictAlert({ conflicts, onClose }) {
 // ── Add Class Form ────────────────────────────────────────────────────────
 function AddClassForm({ selectedBatch, semester, batches, onBatchChange }) {
   const [formBatch,      setFormBatch]      = useState(selectedBatch||'');
-  const [formSemester,   setFormSemester]   = useState(semester||1);
+  const formSemester = semester || 1;   // follows the global active semester
   const [batchCourses,   setBatchCourses]   = useState([]);
   const [batchDefaultRoom, setBatchDefaultRoom] = useState(null);
   const [courseSearch, setCourseSearch] = useState('');
   const [coursesOpen, setCoursesOpen] = useState(false);
 
   useEffect(()=>{ if(selectedBatch) setFormBatch(selectedBatch); },[selectedBatch]);
-  useEffect(()=>{ setFormSemester(semester); },[semester]);
 
   useEffect(()=>{
     if(!formBatch){ setBatchCourses([]); setBatchDefaultRoom(null); return; }
@@ -90,24 +90,19 @@ function AddClassForm({ selectedBatch, semester, batches, onBatchChange }) {
           <label style={fl}>Batch *</label>
           <select value={formBatch||''} onChange={e=>{
             const b = parseInt(e.target.value)||'';
-            setFormBatch(b); setFormSemester(1);
-            onBatchChange?.(b, 1);
+            setFormBatch(b);
+            onBatchChange?.(b);
           }} style={fi}>
             <option value="">-- Select Batch --</option>
             {(batches||[]).map(b=><option key={b.id} value={b.id}>{b.batch_name}</option>)}
           </select>
         </div>
         <div>
-          <label style={fl}>Session *</label>
-          <select value={formSemester} onChange={e=>{
-            const s = parseInt(e.target.value);
-            setFormSemester(s);
-            onBatchChange?.(formBatch, s);
-          }} disabled={!formBatch}
-            style={{ ...fi,background:!formBatch?'#f0f4f7':'white',color:!formBatch?'#aabbc8':'#1a2e3a' }}>
-            <option value={1}>Session 1 (First Semester)</option>
-            <option value={2}>Session 2 (Second Semester)</option>
-          </select>
+          <label style={fl}>Session</label>
+          <div style={{ ...fi,background:'#f0f4f7',color:'#1a2e3a',fontWeight:600,display:'flex',alignItems:'center',gap:'8px' }}
+            title="Change the active semester from the top bar">
+            {semesterLabel(formSemester)}
+          </div>
         </div>
       </div>
 
@@ -708,14 +703,15 @@ function TeacherWiseView({ teachers }) {
   const [loading,    setLoading]    = useState(false);
   const [loaded,     setLoaded]     = useState(false);
 
+  const { semester: activeSem } = useSemester();
   useEffect(()=>{
     if(!selTeacher){ setEntries([]); setLoaded(false); return; }
     setLoading(true); setLoaded(false);
-    api.get('/office/teacher-schedule',{ params:{ teacher_id:selTeacher } })
+    api.get('/office/teacher-schedule',{ params:{ teacher_id:selTeacher, semester:activeSem } })
       .then(r=>{ setEntries(r.data); setLoaded(true); })
       .catch(()=>{ setEntries([]); setLoaded(true); })
       .finally(()=>setLoading(false));
-  },[selTeacher]);
+  },[selTeacher, activeSem]);
 
   const selTeacherObj = teachers.find(t=>String(t.id)===String(selTeacher));
 
@@ -776,14 +772,15 @@ function RoomWiseView({ rooms }) {
   const [loading, setLoading] = useState(false);
   const [loaded,  setLoaded]  = useState(false);
 
+  const { semester: activeSem } = useSemester();
   useEffect(()=>{
     if(!selRoom){ setEntries([]); setLoaded(false); return; }
     setLoading(true); setLoaded(false);
-    api.get('/office/room-schedule',{ params:{ room_id:selRoom } })
+    api.get('/office/room-schedule',{ params:{ room_id:selRoom, semester:activeSem } })
       .then(r=>{ setEntries(r.data); setLoaded(true); })
       .catch(()=>{ setEntries([]); setLoaded(true); })
       .finally(()=>setLoading(false));
-  },[selRoom]);
+  },[selRoom, activeSem]);
 
   const selRoomObj = rooms.find(r=>String(r.id)===String(selRoom));
 
@@ -846,7 +843,7 @@ export default function TimetablePage({ canEdit=false }) {
   const [batchesData,   setBatchesData]   = useState([]); // full batch objects with room info
   const [entries,       setEntries]       = useState([]);
   const [selBatch,      setSelBatch]      = useState(null);
-  const [selSemester,   setSelSemester]   = useState(1);
+  const { semester: selSemester } = useSemester();   // global active semester
   const [filterTeacher, setFilterTeacher] = useState('');
   const [filterRoom,    setFilterRoom]    = useState('');
   const [searchQuery,   setSearchQuery]   = useState('');
@@ -910,9 +907,8 @@ export default function TimetablePage({ canEdit=false }) {
       await api.post('/timetable',form);
       showToast(form.is_lab?'Lab class added':'Class added');
       const newBatch = parseInt(form.batch_id);
-      const newSem   = parseInt(form.semester)||1;
+      const newSem   = selSemester;
       setSelBatch(newBatch);
-      setSelSemester(newSem);
       // Reload entries for this batch AND semester
       const r = await api.get('/timetable', { params: { batch_id: newBatch, semester: newSem } });
       setEntries(r.data);
@@ -1034,10 +1030,10 @@ export default function TimetablePage({ canEdit=false }) {
               </div>
               <div style={{ display:'flex',flexDirection:'column',gap:'4px' }}>
                 <span style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px' }}>Session</span>
-                <SearchableSelect label="Session" placeholder="All Sessions"
-                  value={selSemester||''}
-                  onChange={v=>{ if(pendingMoves.length&&!window.confirm('Switch session? Unsaved changes will be lost.')) return; setSelSemester(v?parseInt(v):null); }}
-                  options={[{ value:1, label:'Session 1 (First Semester)' },{ value:2, label:'Session 2 (Second Semester)' }]}/>
+                <div title="Change the active semester from the top bar"
+                  style={{ padding:'9px 12px',border:'1px solid #dde3e8',borderRadius:'8px',background:'#f0f4f7',fontSize:'13px',fontWeight:600,color:'#1a2e3a',minWidth:'190px',boxSizing:'border-box' }}>
+                  {semesterLabel(selSemester)}
+                </div>
               </div>
               <div style={{ display:'flex',flexDirection:'column',gap:'4px' }}>
                 <span style={{ fontSize:'10px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px' }}>Teacher</span>
@@ -1081,7 +1077,7 @@ export default function TimetablePage({ canEdit=false }) {
 
             {canEdit&&(
               <AddClassForm selectedBatch={selBatch} semester={selSemester} batches={batches}
-                onBatchChange={(b,s)=>{ setSelBatch(b); setSelSemester(s); }}/>
+                onBatchChange={(b)=>setSelBatch(b)}/>
             )}
 
             {!selBatch?(
