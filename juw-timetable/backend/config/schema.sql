@@ -160,3 +160,12 @@ CREATE TABLE IF NOT EXISTS admin_requests (
   reviewed_at   TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_req_status ON admin_requests(status);
+-- ── App settings (global "active semester" the whole system follows) ─────
+-- Created automatically on server start; listed here for reference.
+CREATE TABLE IF NOT EXISTS app_settings (
+  key        VARCHAR(50) PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_by INTEGER,
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+INSERT INTO app_settings (key, value) VALUES ('active_semester', '1') ON CONFLICT (key) DO NOTHING;

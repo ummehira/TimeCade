@@ -9,6 +9,7 @@ import { useResponsive } from '../../hooks/useResponsive';
 import NotificationBell from '../../components/common/NotificationBell';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
+import { useSemester, semesterLabel } from '../../context/SemesterContext';
 import TopHeader from '../../components/common/TopHeader';
 import ExportButtons from '../../components/common/ExportButtons';
 import TeacherAgentPage from './TeacherAgentPage';
@@ -451,7 +452,7 @@ function AllBatchesPage() {
   const { isMobile } = useResponsive();
   const [batches,     setBatches]     = useState([]);
   const [selBatch,    setSelBatch]    = useState('');
-  const [selSemester, setSelSemester] = useState(1);
+  const { semester: selSemester } = useSemester();   // global active semester
   const [entries,     setEntries]     = useState([]);
   const [loading,     setLoading]     = useState(false);
 
@@ -514,19 +515,7 @@ function AllBatchesPage() {
           </div>
           {selBatch && (
             <div style={{ marginBottom:'16px',display:'flex',alignItems:'center',gap:'12px',flexWrap:'wrap' }}>
-              <span style={{ fontSize:'11px',fontWeight:'700',color:'#5a7080',textTransform:'uppercase',letterSpacing:'0.5px' }}>Session</span>
-              <div style={{ display:'flex',gap:'6px' }}>
-                {[{id:1,label:'Session 1'},{id:2,label:'Session 2'}].map(s=>(
-                  <button key={s.id} onClick={()=>setSelSemester(s.id)}
-                    style={{ padding:'6px 14px',borderRadius:'6px',border:'1px solid',fontSize:'11px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit',
-                      background:selSemester===s.id?'#2d4a5a':'white',
-                      color:selSemester===s.id?'white':'#4a6070',
-                      borderColor:selSemester===s.id?'#2d4a5a':'#c8d8e0' }}>
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-              <span style={{ fontSize:'11px',color:'#aabbc8' }}>Showing {selSemester===1?'Session 1 (First Semester)':'Session 2 (Second Semester)'}</span>
+              <span style={{ fontSize:'11px',color:'#7a9aaa',fontWeight:'600' }}>Showing {semesterLabel(selSemester)}</span>
             </div>
           )}
           {!selBatch?(
@@ -562,16 +551,17 @@ function RoomStatusPage() {
   const [entries,  setEntries] = useState([]);
   const [loading,  setLoading] = useState(false);
 
+  const { semester: activeSem } = useSemester();
   useEffect(()=>{ api.get('/office/rooms').then(r=>setRooms(r.data)); },[]);
 
   useEffect(()=>{
     if(!selRoom) return;
     setLoading(true);
-    api.get('/office/room-schedule',{params:{room_id:selRoom}})
+    api.get('/office/room-schedule',{params:{room_id:selRoom, semester:activeSem}})
       .then(r=>setEntries(r.data))
       .catch(()=>setEntries([]))
       .finally(()=>setLoading(false));
-  },[selRoom]);
+  },[selRoom, activeSem]);
 
   const selRoomObj = rooms.find(r=>String(r.id)===String(selRoom));
 

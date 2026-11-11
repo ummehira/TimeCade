@@ -2,6 +2,7 @@
   import React, { useState, useEffect } from 'react';
   import { GraduationCap, Users, BookOpen, Building2, Clock, Plus, Pencil, Check, X, Trash2, Search } from 'lucide-react';
   import api from '../../utils/api';
+  import { useSemester, SEMESTER_OPTIONS } from '../../context/SemesterContext';
   import { useResponsive } from '../../hooks/useResponsive';
 
   const fl = { fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px',color:'#5a7080',display:'block',marginBottom:'5px' };
@@ -190,7 +191,16 @@
     const [editBatch,   setEditBatch]   = useState(null);
     const [editForm,    setEditForm]    = useState({});
     const [editCourses, setEditCourses] = useState([]);
-    const [editSel,     setEditSel]     = useState([]);
+    // Semester-aware selection: { [semester]: [subject_id, ...] }
+    const SEMS = SEMESTER_OPTIONS;   // Session 1 / Session 2
+    const { semester: activeSem } = useSemester();   // global active semester = default choice
+    const [editSelMap,  setEditSelMap]  = useState({});
+    const [editSem,     setEditSem]     = useState(activeSem);
+    const [addSem,      setAddSem]      = useState(activeSem);
+    useEffect(()=>{ setAddSem(activeSem); setEditSem(activeSem); },[activeSem]);
+    const editSel = editSelMap[editSem] || [];
+    const setEditSel = upd => setEditSelMap(m => ({ ...m, [editSem]: typeof upd==='function' ? upd(m[editSem]||[]) : upd }));
+    const editCoursesSem = editCourses.filter(c => Number(c.semester)===editSem);
     const [batchCourses,setBatchCourses]= useState({});
     const [viewBatch,   setViewBatch]   = useState(null);
     const [selIds,      setSelIds]      = useState([]);
@@ -241,10 +251,10 @@
       try{
         const r=await api.post('/office/batches',{...form,batch_name:batchName,default_room_id:selRoom||null});
         for(const sid of selCourses){
-          try{ await api.post('/assignments/batch-subjects',{batch_id:r.data.id,subject_id:sid,semester:1}); }catch(_){}
+          try{ await api.post('/assignments/batch-subjects',{batch_id:r.data.id,subject_id:sid,semester:addSem}); }catch(_){}
         }
         loadData();
-        setM({ok:true,text:selCourses.length>0?`Batch "${batchName}" added with ${selCourses.length} course(s).`:`Batch "${batchName}" added.`});
+        setM({ok:true,text:selCourses.length>0?`Batch "${batchName}" added with ${selCourses.length} course(s) in Semester ${addSem}.`:`Batch "${batchName}" added.`});
         setForm(f=>({...f,major:'',major_code:'',year:new Date().getFullYear(),student_count:45,department_id:'',section:''}));
         setSelCourses([]); setSelRoom('');
       }catch(err){
@@ -265,7 +275,10 @@
       try{
         const r=await api.get('/assignments/batch-subjects',{params:{batch_id:b.id}});
         setEditCourses(r.data);
-        setEditSel(r.data.map(x=>x.subject_id));
+        setEditSem(activeSem);
+        const map = {};
+        r.data.forEach(x=>{ const sem=Number(x.semester); (map[sem]=map[sem]||[]).push(x.subject_id); });
+        setEditSelMap(map);
         // Load major filtered subjects
         const majorRes = b.major_code
           ? await api.get('/office/subjects',{params:{major_code:b.major_code}})
@@ -276,7 +289,7 @@
           .filter(c=>!majorSubjects.find(s=>s.id===c.subject_id))
           .map(c=>({ id:c.subject_id, name:c.subject_name||c.name, short_name:c.short_name||'', major_codes:[] }));
         setSubjects([...majorSubjects, ...extraAssigned]);
-      }catch(_){ setEditCourses([]); setEditSel([]); }
+      }catch(_){ setEditCourses([]); setEditSelMap({}); }
     };
 
     const handleEditSave = async () => {
@@ -289,11 +302,15 @@
           department_id: editBatch.department_id,
           default_room_id: editForm.room_id||null
         });
-        const current = editCourses.map(c=>c.subject_id);
-        const toAdd    = editSel.filter(id=>!current.includes(id));
-        const toRemove = editCourses.filter(c=>!editSel.includes(c.subject_id));
-        for(const sid of toAdd){ try{ await api.post('/assignments/batch-subjects',{batch_id:editBatch.id,subject_id:sid,semester:1}); }catch(_){} }
-        for(const c of toRemove){ try{ await api.delete(`/assignments/batch-subjects/${c.id}`); }catch(_){} }
+        const sems = [...new Set([...SEMS, ...editCourses.map(c=>Number(c.semester))])];
+        for(const sem of sems){
+          const cur      = editCourses.filter(c=>Number(c.semester)===sem);
+          const sel      = editSelMap[sem] || [];
+          const toAdd    = sel.filter(id=>!cur.some(c=>c.subject_id===id));
+          const toRemove = cur.filter(c=>!sel.includes(c.subject_id));
+          for(const sid of toAdd){ try{ await api.post('/assignments/batch-subjects',{batch_id:editBatch.id,subject_id:sid,semester:sem}); }catch(_){} }
+          for(const c of toRemove){ try{ await api.delete(`/assignments/batch-subjects/${c.id}`); }catch(_){} }
+        }
         loadData();
         setM({ok:true,text:'Batch updated successfully.'});
         setEditBatch(null);
@@ -400,11 +417,21 @@
             </div>
             <div style={{ border:'2px solid #dde3e8',borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
               <SectionLabel count={editSel.length}>Assigned Courses</SectionLabel>
-              {editCourses.length > 0 ? (
+              <div style={{ display:'flex',gap:'6px',marginBottom:'12px',alignItems:'center' }}>
+                <span style={{ fontSize:'10px',color:'#7a9aaa',fontWeight:'600',textTransform:'uppercase',letterSpacing:'0.4px' }}>Semester:</span>
+                {SEMS.map(n=>(
+                  <button key={n} type="button" onClick={()=>setEditSem(n)}
+                    style={{ padding:'5px 14px',borderRadius:'6px',border:'1px solid',fontSize:'11px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit',
+                      background:editSem===n?'#2d4a5a':'white',color:editSem===n?'white':'#4a6070',borderColor:editSem===n?'#2d4a5a':'#c8d8e0' }}>
+                    {n===1?'1st':'2nd'} Semester
+                  </button>
+                ))}
+              </div>
+              {editCoursesSem.length > 0 ? (
                 <div style={{ marginBottom:'12px' }}>
-                  <div style={{ fontSize:'10px',color:'#7a9aaa',fontWeight:'600',textTransform:'uppercase',letterSpacing:'0.4px',marginBottom:'8px' }}>Currently Assigned ({editCourses.length})</div>
+                  <div style={{ fontSize:'10px',color:'#7a9aaa',fontWeight:'600',textTransform:'uppercase',letterSpacing:'0.4px',marginBottom:'8px' }}>Currently Assigned in Semester {editSem} ({editCoursesSem.length})</div>
                   <div style={{ display:'flex',flexDirection:'column',gap:'5px' }}>
-                    {editCourses.map(c=>{
+                    {editCoursesSem.map(c=>{
                       const removing = !editSel.includes(c.subject_id);
                       return (
                         <div key={c.subject_id} style={{ display:'flex',alignItems:'center',justifyContent:'space-between',padding:'7px 10px',background:removing?'#fef2f2':'#f0fdf4',border:`1px solid ${removing?'#fca5a5':'#86efac'}`,borderRadius:'6px' }}>
@@ -417,18 +444,18 @@
                       );
                     })}
                   </div>
-                  {editCourses.filter(c=>!editSel.includes(c.subject_id)).length>0&&(
+                  {editCoursesSem.filter(c=>!editSel.includes(c.subject_id)).length>0&&(
                     <div style={{ marginTop:'8px',padding:'6px 10px',background:'#fef2f2',border:'1px solid #fca5a5',borderRadius:'6px',fontSize:'11px',color:'#dc2626' }}>
-                      ⚠ {editCourses.filter(c=>!editSel.includes(c.subject_id)).length} course(s) will be removed on Save
+                      ⚠ {editCoursesSem.filter(c=>!editSel.includes(c.subject_id)).length} course(s) will be removed on Save
                     </div>
                   )}
                 </div>
               ) : (
-                <div style={{ padding:'10px',textAlign:'center',color:'#aabbc8',fontSize:'12px',marginBottom:'8px' }}>No courses assigned yet</div>
+                <div style={{ padding:'10px',textAlign:'center',color:'#aabbc8',fontSize:'12px',marginBottom:'8px' }}>No courses assigned in Semester {editSem} yet</div>
               )}
               <div style={{ borderTop:'1px dashed #dde3e8',paddingTop:'12px' }}>
-                <div style={{ fontSize:'10px',color:'#7a9aaa',fontWeight:'600',textTransform:'uppercase',letterSpacing:'0.4px',marginBottom:'8px' }}>Add More Courses</div>
-                <Checklist items={subjects.filter(s=>!editCourses.find(c=>c.subject_id===s.id))} selected={editSel} onToggle={id=>setEditSel(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])} labelKey="name" emptyText="No more courses available" maxHeight={160}/>
+                <div style={{ fontSize:'10px',color:'#7a9aaa',fontWeight:'600',textTransform:'uppercase',letterSpacing:'0.4px',marginBottom:'8px' }}>Add Courses to Semester {editSem}</div>
+                <Checklist items={subjects.filter(s=>!editCoursesSem.find(c=>c.subject_id===s.id))} selected={editSel} onToggle={id=>setEditSel(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])} labelKey="name" emptyText="No more courses available" maxHeight={160}/>
               </div>
             </div>
             <div style={{ display:'flex',gap:'10px' }}>
@@ -483,6 +510,16 @@
               </div>
               <div style={{ border:'2px solid #dde3e8',borderRadius:'9px',padding:'16px',marginBottom:'16px',background:'white' }}>
                 <SectionLabel count={selCourses.length}>Assign Courses to this Batch</SectionLabel>
+                <div style={{ display:'flex',gap:'6px',marginBottom:'12px',alignItems:'center' }}>
+                  <span style={{ fontSize:'10px',color:'#7a9aaa',fontWeight:'600',textTransform:'uppercase',letterSpacing:'0.4px' }}>Add these courses to:</span>
+                  {SEMS.map(n=>(
+                    <button key={n} type="button" onClick={()=>setAddSem(n)}
+                      style={{ padding:'5px 14px',borderRadius:'6px',border:'1px solid',fontSize:'11px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit',
+                        background:addSem===n?'#2d4a5a':'white',color:addSem===n?'white':'#4a6070',borderColor:addSem===n?'#2d4a5a':'#c8d8e0' }}>
+                      {n===1?'1st':'2nd'} Semester
+                    </button>
+                  ))}
+                </div>
                 {!form.major_code
                   ?<div style={{ padding:'16px',textAlign:'center',color:'#aabbc8',fontSize:'12px',border:'1px dashed #e0e8ed',borderRadius:'7px' }}>Select a major first to see its courses</div>
                   : subjects.length===0
@@ -540,15 +577,25 @@
                     ? <div style={{ fontSize:'12px',color:'#aabbc8',textAlign:'center',padding:'12px' }}>Loading...</div>
                     : batchCourses[viewBatch.id].length===0
                       ? <div style={{ fontSize:'12px',color:'#aabbc8',fontStyle:'italic',textAlign:'center',padding:'12px' }}>No courses assigned yet.</div>
-                      : <div style={{ display:'flex',flexWrap:'wrap',gap:'6px' }}>
-                          {batchCourses[viewBatch.id].map(c=>(
-                            <div key={c.id} style={{ display:'inline-flex',alignItems:'center',gap:'6px',background:'white',border:'1px solid #d0dfe8',borderRadius:'20px',padding:'5px 12px',fontSize:'11px',color:'#1a2e3a',fontWeight:'500' }}>
-                              <span style={{ fontWeight:'700',color:'#2d4a5a',fontSize:'10px' }}>{c.short_name}</span>
-                              {c.subject_name}
-                              {c.has_lab&&<span style={{ background:'#dcfce7',color:'#166534',borderRadius:'3px',padding:'1px 5px',fontSize:'9px',fontWeight:'700',flexShrink:0 }}>Lab</span>}
+                      : [...new Set(batchCourses[viewBatch.id].map(c=>Number(c.semester)))].sort((a,b)=>a-b).map(sem=>{
+                          const list = batchCourses[viewBatch.id].filter(c=>Number(c.semester)===sem);
+                          return (
+                            <div key={sem} style={{ marginBottom:'14px' }}>
+                              <div style={{ fontSize:'10px',fontWeight:'700',color:'#7a9aaa',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'7px' }}>
+                                Semester {sem} · {list.length} course{list.length!==1?'s':''}
+                              </div>
+                              <div style={{ display:'flex',flexWrap:'wrap',gap:'6px' }}>
+                                {list.map(c=>(
+                                  <div key={c.id} style={{ display:'inline-flex',alignItems:'center',gap:'6px',background:'white',border:'1px solid #d0dfe8',borderRadius:'20px',padding:'5px 12px',fontSize:'11px',color:'#1a2e3a',fontWeight:'500' }}>
+                                    <span style={{ fontWeight:'700',color:'#2d4a5a',fontSize:'10px' }}>{c.short_name}</span>
+                                    {c.subject_name}
+                                    {c.has_lab&&<span style={{ background:'#dcfce7',color:'#166534',borderRadius:'3px',padding:'1px 5px',fontSize:'9px',fontWeight:'700',flexShrink:0 }}>Lab</span>}
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          ))}
-                        </div>
+                          );
+                        })
                   }
                 </div>
               </div>

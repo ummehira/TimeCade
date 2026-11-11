@@ -2,6 +2,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { SemesterProvider } from './context/SemesterContext';
 
 import LandingPage        from './pages/LandingPage';
 import LoginPage          from './pages/LoginPage';
@@ -34,6 +35,7 @@ function RoleRedirect() {
 export default function App() {
   return (
     <AuthProvider>
+      <SemesterProvider>
       <BrowserRouter>
         <Routes>
           {/* Public */}
@@ -65,6 +67,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
+      </SemesterProvider>
     </AuthProvider>
   );
 }

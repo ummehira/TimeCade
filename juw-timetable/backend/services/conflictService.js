@@ -1,9 +1,23 @@
 // backend/services/conflictService.js
 const pool = require('../config/db');
+const { getActiveSemester } = require('./settingsService');
 
-async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day, time_slot, exclude_id = null, is_shared = false }) {
+// Each semester has its own, completely separate timetable. Teachers, rooms and
+// batches are only compared against classes of the SAME semester.
+async function resolveSemester(semester, exclude_id) {
+  if (semester !== undefined && semester !== null && semester !== '') return parseInt(semester);
+  // Editing/moving an existing entry: use that entry's own semester
+  if (exclude_id) {
+    const r = await pool.query('SELECT semester FROM timetable WHERE id=$1', [parseInt(exclude_id)]);
+    if (r.rows.length && r.rows[0].semester != null) return parseInt(r.rows[0].semester);
+  }
+  return getActiveSemester(); // nothing specified -> the globally active semester
+}
+
+async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day, time_slot, semester, exclude_id = null, is_shared = false }) {
   const conflicts = [];
   if (!day || !time_slot) return conflicts;
+  const sem = await resolveSemester(semester, exclude_id);
   const excl = exclude_id ? `AND t.id != ${parseInt(exclude_id)}` : '';
 
   // ── SHARED LECTURE MODE ──────────────────────────────────────────────────
@@ -15,16 +29,16 @@ async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day,
   if (is_shared) {
     // 1. Batch conflict
     const batchRes = await pool.query(
-      `SELECT s.name AS subject
+      `SELECT s.name AS subject, COALESCE(t.semester,1) AS semester
        FROM timetable t
        JOIN subjects s ON t.subject_id = s.id
-       WHERE t.batch_id = $1 AND t.day = $2 AND t.time_slot = $3 ${excl}`,
-      [batch_id, day, time_slot]
+       WHERE t.batch_id = $1 AND t.day = $2 AND t.time_slot = $3 AND COALESCE(t.semester,1) = $4 ${excl}`,
+      [batch_id, day, time_slot, sem]
     );
     if (batchRes.rows.length > 0) {
       conflicts.push({
         type: 'batch',
-        message: `Batch conflict: This batch already has "${batchRes.rows[0].subject}" scheduled at this time slot.`
+        message: `Batch conflict: This batch already has "${batchRes.rows[0].subject}" scheduled at this time slot (Semester ${batchRes.rows[0].semester}).`
       });
       return conflicts;
     }
@@ -37,9 +51,9 @@ async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day,
          JOIN subjects s  ON t.subject_id = s.id
          JOIN rooms r     ON t.room_id    = r.id
          LEFT JOIN teachers te ON t.teacher_id = te.id
-         WHERE t.room_id = $1 AND t.day = $2 AND t.time_slot = $3 ${excl}
+         WHERE t.room_id = $1 AND t.day = $2 AND t.time_slot = $3 AND COALESCE(t.semester,1) = $4 ${excl}
          LIMIT 1`,
-        [room_id, day, time_slot]
+        [room_id, day, time_slot, sem]
       );
       if (roomCheck.rows.length > 0) {
         const existing = roomCheck.rows[0];
@@ -60,9 +74,9 @@ async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day,
          FROM timetable t
          JOIN subjects s ON t.subject_id = s.id
          JOIN rooms r    ON t.room_id    = r.id
-         WHERE t.teacher_id = $1 AND t.day = $2 AND t.time_slot = $3 ${excl}
+         WHERE t.teacher_id = $1 AND t.day = $2 AND t.time_slot = $3 AND COALESCE(t.semester,1) = $4 ${excl}
          LIMIT 1`,
-        [teacher_id, day, time_slot]
+        [teacher_id, day, time_slot, sem]
       );
       if (teacherCheck.rows.length > 0) {
         const existing = teacherCheck.rows[0];
@@ -84,18 +98,18 @@ async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day,
   // 1. Teacher conflict
   if (teacher_id) {
     const teacherRes = await pool.query(
-      `SELECT b.batch_name, s.name AS subject
+      `SELECT b.batch_name, s.name AS subject, COALESCE(t.semester,1) AS semester
        FROM timetable t
        JOIN batches b  ON t.batch_id   = b.id
        JOIN subjects s ON t.subject_id = s.id
-       WHERE t.teacher_id = $1 AND t.day = $2 AND t.time_slot = $3 ${excl}`,
-      [teacher_id, day, time_slot]
+       WHERE t.teacher_id = $1 AND t.day = $2 AND t.time_slot = $3 AND COALESCE(t.semester,1) = $4 ${excl}`,
+      [teacher_id, day, time_slot, sem]
     );
     if (teacherRes.rows.length > 0) {
       const r = teacherRes.rows[0];
       conflicts.push({
         type: 'teacher',
-        message: `Teacher conflict: This teacher is already teaching "${r.subject}" for ${r.batch_name} at ${day} slot ${time_slot}.`
+        message: `Teacher conflict: This teacher is already teaching "${r.subject}" for ${r.batch_name} at ${day} slot ${time_slot} (Semester ${r.semester}).`
       });
     }
   }
@@ -103,36 +117,36 @@ async function detectConflicts({ batch_id, subject_id, teacher_id, room_id, day,
   // 2. Room conflict
   if (room_id) {
     const roomRes = await pool.query(
-      `SELECT b.batch_name, s.name AS subject, r.room_id AS room_code
+      `SELECT b.batch_name, s.name AS subject, r.room_id AS room_code, COALESCE(t.semester,1) AS semester
        FROM timetable t
        JOIN batches b  ON t.batch_id   = b.id
        JOIN subjects s ON t.subject_id = s.id
        JOIN rooms r    ON t.room_id    = r.id
-       WHERE t.room_id = $1 AND t.day = $2 AND t.time_slot = $3 ${excl}`,
-      [room_id, day, time_slot]
+       WHERE t.room_id = $1 AND t.day = $2 AND t.time_slot = $3 AND COALESCE(t.semester,1) = $4 ${excl}`,
+      [room_id, day, time_slot, sem]
     );
     if (roomRes.rows.length > 0) {
       const r = roomRes.rows[0];
       conflicts.push({
         type: 'room',
-        message: `Room conflict: Room ${r.room_code} is already booked for "${r.subject}" (${r.batch_name}) at this time.`
+        message: `Room conflict: Room ${r.room_code} is already booked for "${r.subject}" (${r.batch_name}) at this time (Semester ${r.semester}).`
       });
     }
   }
 
   // 3. Batch conflict
   const batchRes = await pool.query(
-    `SELECT s.name AS subject
+    `SELECT s.name AS subject, COALESCE(t.semester,1) AS semester
      FROM timetable t
      JOIN subjects s ON t.subject_id = s.id
-     WHERE t.batch_id = $1 AND t.day = $2 AND t.time_slot = $3 ${excl}`,
-    [batch_id, day, time_slot]
+     WHERE t.batch_id = $1 AND t.day = $2 AND t.time_slot = $3 AND COALESCE(t.semester,1) = $4 ${excl}`,
+    [batch_id, day, time_slot, sem]
   );
   if (batchRes.rows.length > 0) {
     const r = batchRes.rows[0];
     conflicts.push({
       type: 'batch',
-      message: `Batch conflict: This batch already has "${r.subject}" scheduled at this time slot.`
+      message: `Batch conflict: This batch already has "${r.subject}" scheduled at this time slot (Semester ${r.semester}).`
     });
   }
 

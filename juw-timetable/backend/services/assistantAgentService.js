@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { getActiveSemester } = require('./settingsService');
 const lookupTableService = require('./lookupTableService');
 const { askAssistantAgentQwen } = require('./assistantAgentQwenService');
 
@@ -171,6 +172,9 @@ const DAY_ORDER = `CASE t.day WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'W
 async function getAllEntries(filters = {}) {
   const params = [];
   const clauses = [];
+  // the agent only works on the globally active semester
+  params.push(filters.semester ? parseInt(filters.semester) : await getActiveSemester());
+  clauses.push(`COALESCE(t.semester,1) = $${params.length}`);
   if (filters.day) { params.push(filters.day); clauses.push(`t.day = $${params.length}`); }
   if (filters.batchId) { params.push(filters.batchId); clauses.push(`t.batch_id = $${params.length}`); }
   if (filters.teacherId) { params.push(filters.teacherId); clauses.push(`t.teacher_id = $${params.length}`); }
@@ -268,6 +272,7 @@ async function resolveSubject(courseText, batchRow) {
 async function getSlotOccupants({ day, slot, isLab = false, teacherId, roomId, batchId, excludeId }) {
   const params = [day];
   let where = 'WHERE t.day = $1';
+  params.push(await getActiveSemester()); where += ` AND COALESCE(t.semester,1) = $${params.length}`;
   if (excludeId) { params.push(excludeId); where += ` AND t.id <> $${params.length}`; }
   if (teacherId) { params.push(teacherId); where += ` AND t.teacher_id = $${params.length}`; }
   if (roomId) { params.push(roomId); where += ` AND t.room_id = $${params.length}`; }
@@ -309,9 +314,9 @@ async function scheduleClass({ userId, batch, subject, teacher, room, day, slot,
   if (conflicts.length) return { conflicts, entry: null };
 
   const inserted = await pool.query(
-    `INSERT INTO timetable (day, time_slot, slot_label, is_lab, batch_id, subject_id, teacher_id, room_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-    [day, slot, slotLabel(slot, isLab), !!isLab, batch.id, subject.id, teacher?.id || null, room?.id || null]
+    `INSERT INTO timetable (day, time_slot, slot_label, is_lab, batch_id, subject_id, teacher_id, room_id, semester)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+    [day, slot, slotLabel(slot, isLab), !!isLab, batch.id, subject.id, teacher?.id || null, room?.id || null, await getActiveSemester()]
   );
   const [entry] = await getAllEntries({}).then(rows => rows.filter(r => r.id === inserted.rows[0].id));
   return { conflicts: [], entry };
@@ -454,7 +459,9 @@ async function getFreePeriods({ day, teacherId, batchId, roomId, isLab = false }
 async function teacherWorkloadReport() {
   const rows = (await pool.query(
     `SELECT te.id, te.full_name, t.day, t.is_lab
-     FROM timetable t JOIN teachers te ON t.teacher_id = te.id`
+     FROM timetable t JOIN teachers te ON t.teacher_id = te.id
+     WHERE COALESCE(t.semester,1) = $1`,
+    [await getActiveSemester()]
   )).rows;
   const byTeacher = new Map();
   for (const r of rows) {
@@ -470,7 +477,9 @@ async function teacherWorkloadReport() {
 async function roomUtilizationReport() {
   const rows = (await pool.query(
     `SELECT r.id, r.room_id, r.capacity, t.day, t.is_lab
-     FROM timetable t JOIN rooms r ON t.room_id = r.id`
+     FROM timetable t JOIN rooms r ON t.room_id = r.id
+     WHERE COALESCE(t.semester,1) = $1`,
+    [await getActiveSemester()]
   )).rows;
   const totalSlotsPerWeek = DAYS.length * SLOTS.length;
   const byRoom = new Map();
